@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { fetchCompetition, fetchDivisions, fetchMatches } from "@/lib/competition/api";
+import { useCompetitionRealtime } from "@/hooks/useCompetitionRealtime";
 
 export const Route = createFileRoute("/tv/$competitionId")({
   head: () => ({ meta: [{ title: "TV Schedule — MatComp" }] }),
@@ -9,9 +10,20 @@ export const Route = createFileRoute("/tv/$competitionId")({
 
 function TvPage() {
   const { competitionId } = Route.useParams();
+
+  useCompetitionRealtime(
+    competitionId,
+    [
+      ["tv-matches", competitionId],
+      ["tv-comp", competitionId],
+    ],
+    { includeCompetition: true },
+  );
+
   const { data: competition } = useQuery({
     queryKey: ["tv-comp", competitionId],
     queryFn: () => fetchCompetition(competitionId),
+    refetchInterval: 30_000,
   });
   const { data: divisions = [] } = useQuery({
     queryKey: ["tv-divs", competitionId],
@@ -20,7 +32,7 @@ function TvPage() {
   const { data: matches = [] } = useQuery({
     queryKey: ["tv-matches", competitionId],
     queryFn: () => fetchMatches(competitionId),
-    refetchInterval: 3000,
+    refetchInterval: 15_000,
   });
 
   const mats = [...new Set(matches.map((m) => m.mat_number))].sort((a, b) => a - b);

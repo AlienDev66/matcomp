@@ -26,6 +26,11 @@ import {
   selfRegisterForCompetition,
   setEntryApproved,
   setMatchWinner,
+  setMatPaused,
+  recordWeighIn,
+  reopenMatch,
+  recalculateEtas,
+  fetchEmailOutbox,
   updateCompetition,
   updateCompetitionStatus,
   updateDivision,
@@ -97,6 +102,11 @@ function EventAdminPage() {
   const { data: eventStaff = [] } = useQuery({
     queryKey: ["event-staff", competitionId],
     queryFn: () => fetchEventStaff(competitionId),
+    enabled: isManager,
+  });
+  const { data: emailOutbox = [] } = useQuery({
+    queryKey: ["email-outbox", competitionId],
+    queryFn: () => fetchEmailOutbox(competitionId),
     enabled: isManager,
   });
 
@@ -912,18 +922,79 @@ function EventAdminPage() {
                   <p className="text-xs text-muted-foreground">
                     {divisions.find((d) => d.id === e.division_id)?.name ?? "—"}
                     {e.approved === false ? " · não aprovado" : " · aprovado"}
+                    {e.weigh_in_status === "passed"
+                      ? ` · pesagem OK (${e.weigh_in_kg ?? "?"} kg)`
+                      : e.weigh_in_status === "failed"
+                        ? ` · pesagem FALHOU (${e.weigh_in_kg ?? "?"} kg)`
+                        : " · sem pesagem"}
                   </p>
                 </div>
                 {isManager && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="border-white/15"
-                    onClick={() => void toggleApproved(e.id, e.approved === false)}
-                  >
-                    {e.approved === false ? "Aprovar" : "Desaprovar"}
-                  </Button>
+                  <div className="flex flex-wrap gap-1">
+                    <Input
+                      type="number"
+                      step="0.1"
+                      placeholder="kg"
+                      className="h-8 w-20"
+                      id={`wi-${e.id}`}
+                      defaultValue={e.weigh_in_kg ?? ""}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="border-white/15"
+                      onClick={async () => {
+                        const el = document.getElementById(`wi-${e.id}`) as HTMLInputElement | null;
+                        const kg = Number(el?.value);
+                        if (!Number.isFinite(kg) || kg <= 0) {
+                          toast.error("Indica o peso em kg");
+                          return;
+                        }
+                        try {
+                          await recordWeighIn(e.id, { weigh_in_kg: kg, weigh_in_status: "passed" });
+                          toast.success("Pesagem OK");
+                          await qc.invalidateQueries({ queryKey: ["entries", competitionId] });
+                        } catch (err: any) {
+                          toast.error(err.message);
+                        }
+                      }}
+                    >
+                      OK
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="border-white/15 text-rose-400"
+                      onClick={async () => {
+                        const el = document.getElementById(`wi-${e.id}`) as HTMLInputElement | null;
+                        const kg = Number(el?.value);
+                        if (!Number.isFinite(kg) || kg <= 0) {
+                          toast.error("Indica o peso em kg");
+                          return;
+                        }
+                        try {
+                          await recordWeighIn(e.id, { weigh_in_kg: kg, weigh_in_status: "failed" });
+                          toast.message("Pesagem falhada registada");
+                          await qc.invalidateQueries({ queryKey: ["entries", competitionId] });
+                        } catch (err: any) {
+                          toast.error(err.message);
+                        }
+                      }}
+                    >
+                      Falhou
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="border-white/15"
+                      onClick={() => void toggleApproved(e.id, e.approved === false)}
+                    >
+                      {e.approved === false ? "Aprovar" : "Desaprovar"}
+                    </Button>
+                  </div>
                 )}
               </div>
             ))}
@@ -981,24 +1052,77 @@ function EventAdminPage() {
                   const onMat = matches.filter((m) => (m.mat_number || 1) === mat);
                   const live = onMat.filter((m) => m.status === "live").length;
                   const queued = onMat.filter((m) => m.status === "queued").length;
+                  const isPaused = (competition?.paused_mats ?? []).includes(mat);
                   return (
-                    <Link
+                    <div
                       key={mat}
-                      to="/mesa/$competitionId/$mat"
-                      params={{ competitionId, mat: String(mat) }}
-                      target="_blank"
-                      className="border border-white/10 bg-black/20 px-4 py-3 hover:border-primary/50 transition"
+                      className={cn(
+                        "border bg-black/20 px-4 py-3 space-y-2",
+                        isPaused ? "border-amber-500/50" : "border-white/10",
+                      )}
                     >
-                      <p className="text-[10px] uppercase tracking-widest text-primary">Mesa {mat}</p>
-                      <p className="font-display font-semibold">Tatâmi {mat}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {live > 0 ? `${live} ao vivo · ` : ""}
-                        {queued} na fila
-                      </p>
-                    </Link>
+                      <Link
+                        to="/mesa/$competitionId/$mat"
+                        params={{ competitionId, mat: String(mat) }}
+                        search={{}}
+                        target="_blank"
+                        className="block hover:opacity-90"
+                      >
+                        <p className="text-[10px] uppercase tracking-widest text-primary">
+                          Mesa {mat}
+                          {isPaused ? " · PAUSADO" : ""}
+                        </p>
+                        <p className="font-display font-semibold">Tatâmi {mat}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {live > 0 ? `${live} ao vivo · ` : ""}
+                          {queued} na fila
+                        </p>
+                      </Link>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="border-white/15 w-full"
+                        disabled={busy}
+                        onClick={async () => {
+                          setBusy(true);
+                          try {
+                            await setMatPaused(competitionId, mat, !isPaused);
+                            toast.success(isPaused ? `Tatâmi ${mat} retomado` : `Tatâmi ${mat} pausado`);
+                            await qc.invalidateQueries({ queryKey: ["competition", competitionId] });
+                          } catch (err: any) {
+                            toast.error(err.message);
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                      >
+                        {isPaused ? "Retomar" : "Pausar"}
+                      </Button>
+                    </div>
                   );
                 })}
               </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-white/15"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    await recalculateEtas(competitionId);
+                    toast.success("Horários (ETA) recalculados por fila/tatâmi");
+                    await refresh();
+                  } catch (err: any) {
+                    toast.error(err.message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Recalcular horários automáticos
+              </Button>
             </section>
 
             <section className="border border-border bg-card/40 p-5 space-y-4">
@@ -1094,6 +1218,35 @@ function EventAdminPage() {
             </section>
 
             <section className="border border-border bg-card/40 p-5 space-y-4">
+              <h2 className="font-display text-lg font-semibold">Estações do dia</h2>
+              <p className="text-sm text-muted-foreground">
+                Abre em tablets/PCs dedicados: pesagem, chamada (aquecimento/tatâmi) e pódio.
+                Geram tokens abaixo.
+              </p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {(
+                  [
+                    { to: "/pesagem/$competitionId" as const, label: "Pesagem", path: "pesagem" },
+                    { to: "/chamada/$competitionId" as const, label: "Chamada", path: "chamada" },
+                    { to: "/podio/$competitionId" as const, label: "Pódio", path: "podio" },
+                  ] as const
+                ).map((s) => (
+                  <Link
+                    key={s.path}
+                    to={s.to}
+                    params={{ competitionId }}
+                    search={{}}
+                    target="_blank"
+                    className="border border-white/10 bg-black/20 px-4 py-3 hover:border-primary/50"
+                  >
+                    <p className="text-[10px] uppercase tracking-widest text-primary">Estação</p>
+                    <p className="font-display font-semibold">{s.label}</p>
+                  </Link>
+                ))}
+              </div>
+            </section>
+
+            <section className="border border-border bg-card/40 p-5 space-y-4">
               <h2 className="font-display text-lg font-semibold">Staff do evento (mesa / árbitro)</h2>
               <p className="text-sm text-muted-foreground">
                 Gera links com token — a pessoa pontua sem acesso total ao admin.
@@ -1155,6 +1308,41 @@ function EventAdminPage() {
                 >
                   + Token árbitro
                 </Button>
+                {(
+                  [
+                    { role: "weigh_in" as const, label: "Pesagem", path: "pesagem" },
+                    { role: "caller" as const, label: "Chamada", path: "chamada" },
+                    { role: "podium" as const, label: "Pódio", path: "podio" },
+                  ] as const
+                ).map((st) => (
+                  <Button
+                    key={st.role}
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="border-white/15"
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      try {
+                        const s = await createEventStaff(competitionId, {
+                          role: st.role,
+                          label: st.label,
+                        });
+                        const url = `${window.location.origin}/${st.path}/${competitionId}?token=${s.token}`;
+                        await navigator.clipboard.writeText(url);
+                        toast.success(`Link ${st.label} copiado`);
+                        await qc.invalidateQueries({ queryKey: ["event-staff", competitionId] });
+                      } catch (err: any) {
+                        toast.error(err.message);
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    + Token {st.label}
+                  </Button>
+                ))}
               </div>
               <ul className="space-y-2 text-sm">
                 {eventStaff
@@ -1163,7 +1351,13 @@ function EventAdminPage() {
                     const staffUrl =
                       s.role === "mesa" && s.mat_number
                         ? `${typeof window !== "undefined" ? window.location.origin : ""}/mesa/${competitionId}/${s.mat_number}?token=${s.token}`
-                        : `${typeof window !== "undefined" ? window.location.origin : ""}/mesa/${competitionId}?token=${s.token}`;
+                        : s.role === "weigh_in"
+                          ? `${typeof window !== "undefined" ? window.location.origin : ""}/pesagem/${competitionId}?token=${s.token}`
+                          : s.role === "caller"
+                            ? `${typeof window !== "undefined" ? window.location.origin : ""}/chamada/${competitionId}?token=${s.token}`
+                            : s.role === "podium"
+                              ? `${typeof window !== "undefined" ? window.location.origin : ""}/podio/${competitionId}?token=${s.token}`
+                              : `${typeof window !== "undefined" ? window.location.origin : ""}/mesa/${competitionId}?token=${s.token}`;
                     return (
                       <li
                         key={s.id}
@@ -1173,6 +1367,9 @@ function EventAdminPage() {
                           <span className="font-medium">
                             {s.label ?? s.role}
                             {s.mat_number ? ` · tatâmi ${s.mat_number}` : ""}
+                            {s.expires_at
+                              ? ` · expira ${new Date(s.expires_at).toLocaleString("pt-PT")}`
+                              : ""}
                           </span>
                           <div className="flex gap-1">
                             <Button
@@ -1215,6 +1412,33 @@ function EventAdminPage() {
                       </li>
                     );
                   })}
+              </ul>
+            </section>
+
+            <section className="border border-border bg-card/40 p-5 space-y-3">
+              <h2 className="font-display text-lg font-semibold">Email outbox</h2>
+              <p className="text-sm text-muted-foreground">
+                Sem <code className="text-xs">RESEND_API_KEY</code>, os emails ficam aqui como{" "}
+                <code className="text-xs">skipped_no_key</code> — úteis para debug.
+              </p>
+              <ul className="max-h-56 overflow-auto divide-y divide-border text-sm">
+                {emailOutbox.map((row) => (
+                  <li key={row.id} className="py-2 flex flex-wrap justify-between gap-2">
+                    <span>
+                      <span className="font-medium">{row.email_type}</span>
+                      {" → "}
+                      {row.to_email}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {row.sent_at
+                        ? `enviado ${new Date(row.sent_at).toLocaleString("pt-PT")}`
+                        : row.error ?? "pendente"}
+                    </span>
+                  </li>
+                ))}
+                {emailOutbox.length === 0 && (
+                  <li className="py-4 text-muted-foreground text-center">Sem emails neste evento</li>
+                )}
               </ul>
             </section>
 
@@ -1404,6 +1628,7 @@ function EventAdminPage() {
                           competitionId,
                           mat: String(m.mat_number || 1),
                         }}
+                        search={{}}
                         className="text-xs text-primary hover:underline self-center"
                         target="_blank"
                       >
@@ -1428,6 +1653,25 @@ function EventAdminPage() {
                       >
                         Display
                       </Link>
+                      {m.status === "finished" && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="border-white/15 h-8 self-center"
+                          onClick={async () => {
+                            try {
+                              await reopenMatch(m.id);
+                              toast.success("Luta reaberta — podes corrigir o resultado");
+                              await refresh();
+                            } catch (err: any) {
+                              toast.error(err.message);
+                            }
+                          }}
+                        >
+                          Reabrir
+                        </Button>
+                      )}
                     </div>
                   )}
                   <div className="grid gap-2 sm:grid-cols-2">
