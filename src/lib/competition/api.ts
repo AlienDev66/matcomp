@@ -11,7 +11,7 @@ import type {
   MatchStatus,
 } from "./types";
 import { slugify } from "./types";
-import { planSingleElimination } from "./bracket";
+import { planBracket, type BracketFormat } from "./bracket";
 
 export async function fetchMyAcademies() {
   const {
@@ -375,6 +375,7 @@ export type CompetitionUpdate = Partial<{
   academy_id: string | null;
   federation_id: string | null;
   mats_count: number;
+  federation_approval: "none" | "pending" | "approved" | "rejected";
 }>;
 
 export async function updateCompetition(competitionId: string, patch: CompetitionUpdate) {
@@ -495,35 +496,61 @@ export async function createIbjjfAdultGiTemplate(
     belts?: string[];
   },
 ) {
-  const { IBJJF_ADULT_WEIGHTS, BJJ_BELTS } = await import("./eligibility");
-  const belts = input.belts?.length ? input.belts : [...BJJ_BELTS];
-  const label = input.gender === "male" ? "Male Gi" : "Female Gi";
+  return createDivisionTemplate(competitionId, {
+    preset: "adult_gi",
+    gender: input.gender,
+    price_cents: input.price_cents,
+    belts: input.belts,
+  });
+}
+
+export async function createDivisionTemplate(
+  competitionId: string,
+  input: {
+    preset: import("./eligibility").DivisionTemplatePreset;
+    gender: "male" | "female";
+    price_cents: number;
+    belts?: string[];
+  },
+) {
+  const { DIVISION_TEMPLATE_META } = await import("./eligibility");
+  const meta = DIVISION_TEMPLATE_META[input.preset];
+  const belts = input.belts?.length ? input.belts : [...meta.belts];
+  const genderLabel = input.gender === "male" ? "Male" : "Female";
+  const giLabel = meta.gi ? "Gi" : "No-Gi";
+  const label = `${genderLabel} ${giLabel} · ${meta.age_label}`;
+
+  const existing = await fetchDivisions(competitionId);
+  const dup = existing.find((d) => d.kind === "group" && d.name === label);
+  if (dup) return fetchDivisions(competitionId);
 
   const group = await createDivision(competitionId, {
     name: label,
     kind: "group",
     gender: input.gender,
-    age_label: "Adult",
-    age_min: 18,
+    age_label: meta.age_label,
+    age_min: meta.age_min,
+    age_max: meta.age_max,
     price_cents: 0,
-    sort_order: input.gender === "male" ? 0 : 1,
+    sort_order: existing.filter((d) => d.kind === "group").length,
   });
 
   let order = 0;
   for (const belt of belts) {
     let prevMax = 0;
-    for (const w of IBJJF_ADULT_WEIGHTS) {
+    for (const w of meta.weights) {
       const name = w.maxKg
-        ? `${label} / ${belt} / Adult / -${w.maxKg} kg (${w.label})`
-        : `${label} / ${belt} / Adult / +${prevMax} kg (${w.label})`;
+        ? `${label} / ${belt} / -${w.maxKg} kg (${w.label})`
+        : `${label} / ${belt} / +${prevMax} kg (${w.label})`;
       await createDivision(competitionId, {
         name,
         kind: "entry",
         parent_id: group.id,
         gender: input.gender,
         belt,
-        age_label: "Adult",
-        age_min: 18,
+        age_label: meta.age_label,
+        age_min: meta.age_min,
+        age_max: meta.age_max,
         weight_label: w.label,
         weight_min_kg: w.maxKg == null ? prevMax : prevMax > 0 ? prevMax : null,
         weight_max_kg: w.maxKg,
@@ -719,14 +746,28 @@ export async function generateBracket(
   competitionId: string,
   divisionId: string,
   athleteIds: string[],
-  opts?: { matNumber?: number },
+  opts?: { matNumber?: number; format?: BracketFormat },
 ) {
-  const planned = planSingleElimination(athleteIds);
+  let format: BracketFormat = opts?.format ?? "single_elim";
+  if (!opts?.format) {
+    const { data: div } = await supabase
+      .from("competition_divisions")
+      .select("bracket_format")
+      .eq("id", divisionId)
+      .maybeSingle();
+    if (div?.bracket_format) format = div.bracket_format as BracketFormat;
+  } else {
+    await supabase
+      .from("competition_divisions")
+      .update({ bracket_format: format } as never)
+      .eq("id", divisionId);
+  }
+
+  const planned = planBracket(format, athleteIds);
   const matNumber = opts?.matNumber ?? 1;
 
   await supabase.from("competition_matches").delete().eq("division_id", divisionId);
 
-  const keyToId = new Map<string, string>();
   const rows = planned.map((p, i) => ({
     competition_id: competitionId,
     division_id: divisionId,
@@ -741,30 +782,61 @@ export async function generateBracket(
     next_slot: p.nextSlot,
     clock_seconds: 360,
     clock_running: false,
+    bracket_side: p.bracketSide ?? null,
+    is_bye: !!p.isBye,
+    loser_next_match_id: null as string | null,
+    loser_next_slot: p.loserNextSlot ?? null,
     _key: p.key,
     _next: p.nextMatchKey,
+    _loserNext: p.loserNextMatchKey ?? null,
   }));
 
   const { data: inserted, error } = await supabase
     .from("competition_matches")
-    .insert(rows.map(({ _key, _next, ...r }) => r) as never)
-    .select("id, round_index, match_index");
+    .insert(rows.map(({ _key, _next, _loserNext, ...r }) => r) as never)
+    .select("id, round_index, match_index, sort_order");
   if (error) throw error;
 
+  const keyToId = new Map<string, string>();
   for (const row of inserted ?? []) {
-    keyToId.set(`${row.round_index}:${row.match_index}`, row.id);
+    const p = planned[row.sort_order];
+    if (p) keyToId.set(p.key, row.id);
   }
 
   for (const p of planned) {
-    if (!p.nextMatchKey) continue;
     const id = keyToId.get(p.key);
-    const nextId = keyToId.get(p.nextMatchKey);
-    if (id && nextId) {
-      await supabase
-        .from("competition_matches")
-        .update({ next_match_id: nextId, next_slot: p.nextSlot } as never)
-        .eq("id", id);
+    if (!id) continue;
+    const patch: Record<string, unknown> = {};
+    if (p.nextMatchKey) {
+      const nextId = keyToId.get(p.nextMatchKey);
+      if (nextId) {
+        patch.next_match_id = nextId;
+        patch.next_slot = p.nextSlot;
+      }
     }
+    if (p.loserNextMatchKey) {
+      const loserNextId = keyToId.get(p.loserNextMatchKey);
+      if (loserNextId) {
+        patch.loser_next_match_id = loserNextId;
+        patch.loser_next_slot = p.loserNextSlot;
+      }
+    }
+    if (Object.keys(patch).length) {
+      await supabase.from("competition_matches").update(patch as never).eq("id", id);
+    }
+  }
+
+  // Auto-resolve BYEs: advance the present athlete
+  const { data: byes } = await supabase
+    .from("competition_matches")
+    .select("*")
+    .eq("division_id", divisionId)
+    .eq("is_bye", true);
+
+  for (const m of byes ?? []) {
+    const winnerId = m.athlete_a_id ?? m.athlete_b_id;
+    if (!winnerId) continue;
+    await setMatchWinner(m.id, winnerId, "walkover");
   }
 
   await supabase.from("competitions").update({ status: "live" } as never).eq("id", competitionId);
@@ -794,6 +866,21 @@ export async function setMatchWinner(
   if (match.next_match_id && match.next_slot) {
     const patch = match.next_slot === "a" ? { athlete_a_id: winnerId } : { athlete_b_id: winnerId };
     await supabase.from("competition_matches").update(patch as never).eq("id", match.next_match_id);
+  }
+
+  const loserId =
+    match.athlete_a_id === winnerId
+      ? match.athlete_b_id
+      : match.athlete_b_id === winnerId
+        ? match.athlete_a_id
+        : null;
+  if (loserId && match.loser_next_match_id && match.loser_next_slot) {
+    const patch =
+      match.loser_next_slot === "a" ? { athlete_a_id: loserId } : { athlete_b_id: loserId };
+    await supabase
+      .from("competition_matches")
+      .update(patch as never)
+      .eq("id", match.loser_next_match_id);
   }
 }
 
@@ -981,4 +1068,155 @@ export async function fetchMyEntries() {
     .in("athlete_id", ids);
   if (error) throw error;
   return (data ?? []) as CompetitionEntry[];
+}
+
+// ─── Event staff / mesa tokens ───────────────────────────────────────────────
+
+export async function fetchEventStaff(competitionId: string) {
+  const { data, error } = await supabase
+    .from("event_staff")
+    .select("*")
+    .eq("competition_id", competitionId)
+    .order("created_at");
+  if (error) throw error;
+  return (data ?? []) as import("./types").EventStaff[];
+}
+
+export async function createEventStaff(
+  competitionId: string,
+  input: {
+    role: import("./types").EventStaffRole;
+    mat_number?: number | null;
+    label?: string;
+  },
+) {
+  const { data, error } = await supabase
+    .from("event_staff")
+    .insert({
+      competition_id: competitionId,
+      role: input.role,
+      mat_number: input.mat_number ?? null,
+      label: input.label ?? null,
+      active: true,
+    } as never)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as import("./types").EventStaff;
+}
+
+export async function revokeEventStaff(staffId: string) {
+  const { error } = await supabase
+    .from("event_staff")
+    .update({ active: false } as never)
+    .eq("id", staffId);
+  if (error) throw error;
+}
+
+export async function resolveMesaToken(token: string) {
+  const { data, error } = await supabase.rpc("resolve_mesa_token", { _token: token });
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  return (row ?? null) as {
+    staff_id: string;
+    competition_id: string;
+    role: import("./types").EventStaffRole;
+    mat_number: number | null;
+    label: string | null;
+  } | null;
+}
+
+export async function mesaUpdateMatch(
+  matchId: string,
+  token: string,
+  patch: Record<string, unknown>,
+) {
+  const { data, error } = await supabase.rpc("mesa_update_match", {
+    _match_id: matchId,
+    _token: token,
+    _patch: patch,
+  });
+  if (error) throw error;
+  return data as CompetitionMatch;
+}
+
+export async function mesaSetWinner(
+  matchId: string,
+  token: string,
+  winnerId: string,
+  winMethod: string = "points",
+) {
+  const { data, error } = await supabase.rpc("mesa_set_winner", {
+    _match_id: matchId,
+    _token: token,
+    _winner_id: winnerId,
+    _win_method: winMethod,
+  });
+  if (error) throw error;
+  return data as CompetitionMatch;
+}
+
+export async function redistributeMats(competitionId: string, matsCount: number) {
+  const n = Math.max(1, matsCount);
+  const matches = await fetchMatches(competitionId);
+  const active = matches.filter((m) => m.status !== "finished" && m.status !== "cancelled");
+  let i = 0;
+  for (const m of active) {
+    const mat = (i % n) + 1;
+    await updateMatch(m.id, { mat_number: mat });
+    i += 1;
+  }
+  return fetchMatches(competitionId);
+}
+
+export async function requestFederationApproval(competitionId: string) {
+  const { data, error } = await supabase
+    .from("competitions")
+    .update({ federation_approval: "pending" } as never)
+    .eq("id", competitionId)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as Competition;
+}
+
+export async function setFederationApproval(
+  competitionId: string,
+  status: "approved" | "rejected",
+) {
+  const { data, error } = await supabase
+    .from("competitions")
+    .update({ federation_approval: status } as never)
+    .eq("id", competitionId)
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as Competition;
+}
+
+export async function fetchPendingFederationEvents(federationId: string) {
+  const { data, error } = await supabase
+    .from("competitions")
+    .select("*")
+    .eq("federation_id", federationId)
+    .eq("federation_approval", "pending")
+    .order("starts_at");
+  if (error) throw error;
+  return (data ?? []) as Competition[];
+}
+
+export async function isFederationAdmin(federationId: string) {
+  const { data, error } = await supabase.rpc("is_federation_admin", {
+    _federation_id: federationId,
+  });
+  if (error) return false;
+  return !!data;
+}
+
+export async function ensureFederationAdmin(federationId: string, userId: string) {
+  const { error } = await supabase.from("federation_admins").upsert(
+    { federation_id: federationId, user_id: userId } as never,
+    { onConflict: "federation_id,user_id" },
+  );
+  if (error && !error.message.includes("duplicate")) throw error;
 }
