@@ -1,68 +1,90 @@
 # MatComp
 
 Plataforma multi-academia para competições de Jiu-Jitsu (estilo Smoothcomp).
-Stack: **TanStack Start** + **Supabase** + **Vercel**.
+Stack: **TanStack Start** + **Supabase** + **Vercel** + **Stripe**.
 
-Pasta: `~/Coding/personal/matcomp`  
-A app de mensalidades Team FS continua em `~/Coding/personal/teamfs/payment-system`.
+## Funcionalidades (produção V1+)
 
-## Funcionalidades (MVP)
+- Landing marketing + home discovery (Upcoming / Past / Yours)
+- URLs `/{lang}/event/:id` (+ redirect `/c/:id`)
+- Conta universal, join academia, eventos user-owned
+- Capa via Supabase Storage, bracket visual, ETA schedule, medalhas
+- Stripe Checkout (early bird −20%), página `/payments`
+- Rankings por temporada (`/rankings` + recalc)
+- Scoreboard IBJJF-like (`/scoreboard/:matchId`) + mesas por tatâmi (`/mesa/:id/:mat`) + TV (`/tv/:id`)
+- Check-in QR (`/check-in/:code` + `/check-in/scan`)
+- Federações path `/f/:slug` (subdomínio `*.matcomp.com` → redirect)
 
-- Conta de organizador + criar academia (tenant)
-- Roster de atletas por academia
-- Competições → divisões → inscrições → chave single-elim
-- Página pública `/c/:id` com refresh ao vivo
-- Layout e visual alinhados ao Team FS (escuro, tipografia Syne + DM Sans)
+## Setup
 
-## Setup rápido
+### 1. Supabase
 
-### 1. Supabase (projeto **novo**)
+SQL Editor → corre **por ordem**:
 
-1. Cria um projeto em [supabase.com](https://supabase.com)
-2. SQL Editor → cola e corre `supabase/migrations/20260619000000_matcomp_core.sql`
-3. Authentication → Providers → Email ligado
-4. Copia URL + anon key
+1. `supabase/migrations/20260619000000_matcomp_core.sql`
+2. `supabase/migrations/20260919180000_smoothcomp_memberships.sql`
+3. `supabase/migrations/20260919190000_event_richness.sql`
+4. `supabase/migrations/20260919200000_production_features.sql`
+5. `supabase/migrations/20260919210000_athlete_account_roster.sql`
+6. `supabase/migrations/20260919220000_register_wizard.sql`
+7. `supabase/migrations/20260919230000_multi_entry_mesa.sql`
+8. `supabase/migrations/20260919240000_win_method_no_show.sql`
+9. `supabase/migrations/20260919250000_mats_count.sql`
+10. `supabase/migrations/20260919260000_sides_swapped.sql`
 
-### 2. Env local
+As migrations 4–5 acrescentam pagamentos, rankings, federações, bucket de capas, e roster só com contas MatComp (add by email / remove). A 9 define `mats_count` (N tatâmis → N mesas independentes). A 10 sincroniza trocar lados mesa ↔ display.
+
+### 2. Env
 
 ```bash
 cp .env.example .env.local
 ```
 
-Preenche:
-
 ```
-VITE_SUPABASE_URL=https://xxxx.supabase.co
-VITE_SUPABASE_PUBLISHABLE_KEY=eyJ...
+VITE_SUPABASE_URL=…
+VITE_SUPABASE_PUBLISHABLE_KEY=…
+STRIPE_SECRET_KEY=sk_test_…   # opcional até beta pagos
+APP_URL=http://localhost:3000
 ```
-
-(Aliases `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` também funcionam no SSR.)
 
 ### 3. Dev
 
 ```bash
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
-### 4. Vercel
+### 4. Dados demo (opcional)
 
-1. Importa o repo `matcomp`
-2. Framework: Vite / TanStack
-3. Env vars: as mesmas do `.env.local`
-4. Deploy
+No Dashboard Supabase → **Settings → API**, copia a chave **service_role** para o `.env`:
 
-## Fluxo de uso
+```
+SUPABASE_SERVICE_ROLE_KEY=eyJ…
+```
 
-1. Criar conta em `/auth`
-2. Criar academia em `/onboarding`
-3. Adicionar atletas → criar competição → divisões → inscrever → **Gerar chave**
-4. Abrir página pública e tocar no vencedor no painel admin
+Depois:
 
-## Próximos passos naturais
+```bash
+bun run seed
+```
 
-- Inscrição pública / pagamento de fee
-- Vários tatâmis + fila
-- Ranking por academia / temporada
-- Branding por academia (logo + cor)
-- Remover módulo de competições do `payment-system` quando MatComp estiver estável
+Cria (idempotente) federações, academias, ~100 atletas, 4 eventos com cenários distintos, e contas:
+
+| Email | Password | Papel |
+|-------|----------|--------|
+| `organizador@matcomp.demo` | `MatCompDemo1!` | Owner Alien + Lisboa · Barcelos LIVE |
+| `coach@matcomp.demo` | `MatCompDemo1!` | Owner Porto + Braga |
+| `referee@matcomp.demo` | `MatCompDemo1!` | Staff Alien |
+| `atleta1@matcomp.demo` … `atleta8@` | `MatCompDemo1!` | Atletas com conta |
+| `pendente@matcomp.demo` | `MatCompDemo1!` | Pedido de adesão pendente |
+
+Eventos seed: **Barcelos LIVE** (4 tatâmis + muitas lutas), **Porto** (inscrições), **Lisboa** (finished), **Braga** (draft).
+
+## Fluxos principais
+
+1. `/` marketing → login → `/home` discovery
+2. Criar evento → upload capa → divisões com preço → Inscrições
+3. Atleta regista-se → Stripe (se preço > 0) → `/payments`
+4. Definir nº de tatâmis → gerar chave → abrir `/mesa/:id/1` … `/mesa/:id/N` (um PC por mesa) → scoreboard / TV
+5. `/rankings` → Recalcular após eventos `finished`
+6. Federação demo: `/f/matcomp` (seed na migration)
