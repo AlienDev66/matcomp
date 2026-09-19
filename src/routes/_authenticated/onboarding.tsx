@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { createAcademy } from "@/lib/competition/api";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/Logo";
 import { toast } from "sonner";
 import { slugify } from "@/lib/competition/types";
+import { ArrowLeft } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/onboarding")({
   head: () => ({ meta: [{ title: "Criar academia — MatComp" }] }),
@@ -37,12 +38,19 @@ function OnboardingPage() {
 
   return (
     <div className="mx-auto max-w-md px-4 py-16 space-y-8">
-      <div className="text-center space-y-2">
-        <Logo className="mx-auto h-12 w-12" />
-        <h1 className="font-display text-3xl font-bold">Cria a tua academia</h1>
-        <p className="text-sm text-muted-foreground">
-          Em menos de um minuto tens um espaço para torneios e atletas.
-        </p>
+      <div className="space-y-3">
+        <Button asChild variant="ghost" size="sm" className="text-muted-foreground -ml-2">
+          <Link to="/home">
+            <ArrowLeft className="h-4 w-4 mr-1" /> Início
+          </Link>
+        </Button>
+        <div className="text-center space-y-2">
+          <Logo className="mx-auto h-12 w-12" />
+          <h1 className="font-display text-3xl font-bold">Cria a tua academia</h1>
+          <p className="text-sm text-muted-foreground">
+            Em menos de um minuto tens um espaço para torneios e atletas.
+          </p>
+        </div>
       </div>
 
       <form onSubmit={submit} className="space-y-4 rounded-2xl border border-border bg-card/50 p-6">
