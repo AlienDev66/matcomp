@@ -15,6 +15,7 @@ import { WIN_METHOD_BTN, WIN_METHOD_LABEL, type WinMethod } from "@/lib/competit
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { getMesaToken, mesaTokenFromSearch, setMesaToken } from "@/lib/mesa-token";
+import { useMatchRealtime } from "@/hooks/useCompetitionRealtime";
 
 export const Route = createFileRoute("/scoreboard/$matchId")({
   head: () => ({ meta: [{ title: "Mesa — MatComp" }] }),
@@ -37,7 +38,7 @@ function MesaScoreboardPage() {
   const { data: match } = useQuery({
     queryKey: ["match", matchId],
     queryFn: () => fetchMatch(matchId),
-    refetchInterval: 1500,
+    refetchInterval: 12_000,
   });
   const { data: divisions = [] } = useQuery({
     queryKey: ["divisions", match?.competition_id],
@@ -48,8 +49,13 @@ function MesaScoreboardPage() {
     queryKey: ["mesa-matches", match?.competition_id],
     queryFn: () => fetchMatches(match!.competition_id),
     enabled: !!match?.competition_id,
-    refetchInterval: 3000,
+    refetchInterval: 15_000,
   });
+
+  useMatchRealtime(matchId, match?.competition_id, [
+    ["match", matchId],
+    ["mesa-matches", match?.competition_id],
+  ]);
 
   const [seconds, setSeconds] = useState(6 * 60);
   const [running, setRunning] = useState(false);
@@ -207,6 +213,10 @@ function MesaScoreboardPage() {
       const token = getMesaToken();
       if (token) {
         await mesaSetWinner(matchId, token, winnerId, method);
+        if (match?.division_id && match.competition_id) {
+          const { syncPodiumQueueForDivision } = await import("@/lib/competition/api");
+          await syncPodiumQueueForDivision(match.competition_id, match.division_id);
+        }
       } else {
         await setMatchWinner(matchId, winnerId, method);
       }
@@ -215,6 +225,7 @@ function MesaScoreboardPage() {
       toast.success("Luta terminada");
       await qc.invalidateQueries({ queryKey: ["match", matchId] });
       await qc.invalidateQueries({ queryKey: ["mesa-matches", match?.competition_id] });
+      await qc.invalidateQueries({ queryKey: ["station-podium", match?.competition_id] });
     } catch (err: any) {
       toast.error(err.message);
     }
