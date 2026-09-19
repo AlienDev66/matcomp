@@ -19,11 +19,14 @@ import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authentic
 import { Route as AuthenticatedPaymentsRouteImport } from './routes/_authenticated/payments'
 import { Route as AuthenticatedRankingsRouteImport } from './routes/_authenticated/rankings'
 import { Route as CCompetitionIdRouteImport } from './routes/c.$competitionId'
+import { Route as ChamadaCompetitionIdRouteImport } from './routes/chamada.$competitionId'
 import { Route as CheckInCodeRouteImport } from './routes/check-in.$code'
 import { Route as CheckInScanRouteImport } from './routes/check-in.scan'
 import { Route as DisplayMatchIdRouteImport } from './routes/display.$matchId'
 import { Route as FFederationSlugRouteImport } from './routes/f.$federationSlug'
 import { Route as MesaCompetitionIdRouteImport } from './routes/mesa.$competitionId'
+import { Route as PesagemCompetitionIdRouteImport } from './routes/pesagem.$competitionId'
+import { Route as PodioCompetitionIdRouteImport } from './routes/podio.$competitionId'
 import { Route as ScoreboardMatchIdRouteImport } from './routes/scoreboard.$matchId'
 import { Route as TvCompetitionIdRouteImport } from './routes/tv.$competitionId'
 import { Route as LangEventEventIdRouteImport } from './routes/$lang.event.$eventId'
@@ -31,6 +34,7 @@ import { Route as AuthenticatedASlugRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedEventsIndexRouteImport } from './routes/_authenticated/events/index'
 import { Route as AuthenticatedEventsCompetitionIdRouteImport } from './routes/_authenticated/events/$competitionId'
 import { Route as AuthenticatedEventsNewRouteImport } from './routes/_authenticated/events/new'
+import { Route as ApiWebhooksStripeRouteImport } from './routes/api/webhooks/stripe'
 import { Route as MesaCompetitionIdIndexRouteImport } from './routes/mesa.$competitionId.index'
 import { Route as MesaCompetitionIdMatRouteImport } from './routes/mesa.$competitionId.$mat'
 import { Route as LangEventEventIdIndexRouteImport } from './routes/$lang.event.$eventId.index'
@@ -91,6 +95,11 @@ const CCompetitionIdRoute = CCompetitionIdRouteImport.update({
   path: '/c/$competitionId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ChamadaCompetitionIdRoute = ChamadaCompetitionIdRouteImport.update({
+  id: '/chamada/$competitionId',
+  path: '/chamada/$competitionId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CheckInCodeRoute = CheckInCodeRouteImport.update({
   id: '/check-in/$code',
   path: '/check-in/$code',
@@ -114,6 +123,16 @@ const FFederationSlugRoute = FFederationSlugRouteImport.update({
 const MesaCompetitionIdRoute = MesaCompetitionIdRouteImport.update({
   id: '/mesa/$competitionId',
   path: '/mesa/$competitionId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PesagemCompetitionIdRoute = PesagemCompetitionIdRouteImport.update({
+  id: '/pesagem/$competitionId',
+  path: '/pesagem/$competitionId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PodioCompetitionIdRoute = PodioCompetitionIdRouteImport.update({
+  id: '/podio/$competitionId',
+  path: '/podio/$competitionId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ScoreboardMatchIdRoute = ScoreboardMatchIdRouteImport.update({
@@ -152,6 +171,11 @@ const AuthenticatedEventsNewRoute = AuthenticatedEventsNewRouteImport.update({
   id: '/events/new',
   path: '/events/new',
   getParentRoute: () => AuthenticatedRoute,
+} as any)
+const ApiWebhooksStripeRoute = ApiWebhooksStripeRouteImport.update({
+  id: '/api/webhooks/stripe',
+  path: '/api/webhooks/stripe',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const MesaCompetitionIdIndexRoute = MesaCompetitionIdIndexRouteImport.update({
   id: '/',
@@ -214,17 +238,21 @@ export interface FileRoutesByFullPath {
   '/payments': typeof AuthenticatedPaymentsRoute
   '/rankings': typeof AuthenticatedRankingsRoute
   '/c/$competitionId': typeof CCompetitionIdRoute
+  '/chamada/$competitionId': typeof ChamadaCompetitionIdRoute
   '/check-in/$code': typeof CheckInCodeRoute
   '/check-in/scan': typeof CheckInScanRoute
   '/display/$matchId': typeof DisplayMatchIdRoute
   '/f/$federationSlug': typeof FFederationSlugRoute
   '/mesa/$competitionId': typeof MesaCompetitionIdRouteWithChildren
+  '/pesagem/$competitionId': typeof PesagemCompetitionIdRoute
+  '/podio/$competitionId': typeof PodioCompetitionIdRoute
   '/scoreboard/$matchId': typeof ScoreboardMatchIdRoute
   '/tv/$competitionId': typeof TvCompetitionIdRoute
   '/$lang/event/$eventId': typeof LangEventEventIdRouteWithChildren
   '/a/$slug': typeof AuthenticatedASlugRouteWithChildren
   '/events/$competitionId': typeof AuthenticatedEventsCompetitionIdRoute
   '/events/new': typeof AuthenticatedEventsNewRoute
+  '/api/webhooks/stripe': typeof ApiWebhooksStripeRoute
   '/mesa/$competitionId/$mat': typeof MesaCompetitionIdMatRoute
   '/events/': typeof AuthenticatedEventsIndexRoute
   '/mesa/$competitionId/': typeof MesaCompetitionIdIndexRoute
@@ -246,14 +274,18 @@ export interface FileRoutesByTo {
   '/payments': typeof AuthenticatedPaymentsRoute
   '/rankings': typeof AuthenticatedRankingsRoute
   '/c/$competitionId': typeof CCompetitionIdRoute
+  '/chamada/$competitionId': typeof ChamadaCompetitionIdRoute
   '/check-in/$code': typeof CheckInCodeRoute
   '/check-in/scan': typeof CheckInScanRoute
   '/display/$matchId': typeof DisplayMatchIdRoute
   '/f/$federationSlug': typeof FFederationSlugRoute
+  '/pesagem/$competitionId': typeof PesagemCompetitionIdRoute
+  '/podio/$competitionId': typeof PodioCompetitionIdRoute
   '/scoreboard/$matchId': typeof ScoreboardMatchIdRoute
   '/tv/$competitionId': typeof TvCompetitionIdRoute
   '/events/$competitionId': typeof AuthenticatedEventsCompetitionIdRoute
   '/events/new': typeof AuthenticatedEventsNewRoute
+  '/api/webhooks/stripe': typeof ApiWebhooksStripeRoute
   '/mesa/$competitionId/$mat': typeof MesaCompetitionIdMatRoute
   '/events': typeof AuthenticatedEventsIndexRoute
   '/mesa/$competitionId': typeof MesaCompetitionIdIndexRoute
@@ -277,17 +309,21 @@ export interface FileRoutesById {
   '/_authenticated/payments': typeof AuthenticatedPaymentsRoute
   '/_authenticated/rankings': typeof AuthenticatedRankingsRoute
   '/c/$competitionId': typeof CCompetitionIdRoute
+  '/chamada/$competitionId': typeof ChamadaCompetitionIdRoute
   '/check-in/$code': typeof CheckInCodeRoute
   '/check-in/scan': typeof CheckInScanRoute
   '/display/$matchId': typeof DisplayMatchIdRoute
   '/f/$federationSlug': typeof FFederationSlugRoute
   '/mesa/$competitionId': typeof MesaCompetitionIdRouteWithChildren
+  '/pesagem/$competitionId': typeof PesagemCompetitionIdRoute
+  '/podio/$competitionId': typeof PodioCompetitionIdRoute
   '/scoreboard/$matchId': typeof ScoreboardMatchIdRoute
   '/tv/$competitionId': typeof TvCompetitionIdRoute
   '/$lang/event/$eventId': typeof LangEventEventIdRouteWithChildren
   '/_authenticated/a/$slug': typeof AuthenticatedASlugRouteWithChildren
   '/_authenticated/events/$competitionId': typeof AuthenticatedEventsCompetitionIdRoute
   '/_authenticated/events/new': typeof AuthenticatedEventsNewRoute
+  '/api/webhooks/stripe': typeof ApiWebhooksStripeRoute
   '/mesa/$competitionId/$mat': typeof MesaCompetitionIdMatRoute
   '/_authenticated/events/': typeof AuthenticatedEventsIndexRoute
   '/mesa/$competitionId/': typeof MesaCompetitionIdIndexRoute
@@ -311,17 +347,21 @@ export interface FileRouteTypes {
     | '/payments'
     | '/rankings'
     | '/c/$competitionId'
+    | '/chamada/$competitionId'
     | '/check-in/$code'
     | '/check-in/scan'
     | '/display/$matchId'
     | '/f/$federationSlug'
     | '/mesa/$competitionId'
+    | '/pesagem/$competitionId'
+    | '/podio/$competitionId'
     | '/scoreboard/$matchId'
     | '/tv/$competitionId'
     | '/$lang/event/$eventId'
     | '/a/$slug'
     | '/events/$competitionId'
     | '/events/new'
+    | '/api/webhooks/stripe'
     | '/mesa/$competitionId/$mat'
     | '/events/'
     | '/mesa/$competitionId/'
@@ -343,14 +383,18 @@ export interface FileRouteTypes {
     | '/payments'
     | '/rankings'
     | '/c/$competitionId'
+    | '/chamada/$competitionId'
     | '/check-in/$code'
     | '/check-in/scan'
     | '/display/$matchId'
     | '/f/$federationSlug'
+    | '/pesagem/$competitionId'
+    | '/podio/$competitionId'
     | '/scoreboard/$matchId'
     | '/tv/$competitionId'
     | '/events/$competitionId'
     | '/events/new'
+    | '/api/webhooks/stripe'
     | '/mesa/$competitionId/$mat'
     | '/events'
     | '/mesa/$competitionId'
@@ -373,17 +417,21 @@ export interface FileRouteTypes {
     | '/_authenticated/payments'
     | '/_authenticated/rankings'
     | '/c/$competitionId'
+    | '/chamada/$competitionId'
     | '/check-in/$code'
     | '/check-in/scan'
     | '/display/$matchId'
     | '/f/$federationSlug'
     | '/mesa/$competitionId'
+    | '/pesagem/$competitionId'
+    | '/podio/$competitionId'
     | '/scoreboard/$matchId'
     | '/tv/$competitionId'
     | '/$lang/event/$eventId'
     | '/_authenticated/a/$slug'
     | '/_authenticated/events/$competitionId'
     | '/_authenticated/events/new'
+    | '/api/webhooks/stripe'
     | '/mesa/$competitionId/$mat'
     | '/_authenticated/events/'
     | '/mesa/$competitionId/'
@@ -401,14 +449,18 @@ export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AuthRoute: typeof AuthRoute
   CCompetitionIdRoute: typeof CCompetitionIdRoute
+  ChamadaCompetitionIdRoute: typeof ChamadaCompetitionIdRoute
   CheckInCodeRoute: typeof CheckInCodeRoute
   CheckInScanRoute: typeof CheckInScanRoute
   DisplayMatchIdRoute: typeof DisplayMatchIdRoute
   FFederationSlugRoute: typeof FFederationSlugRoute
   MesaCompetitionIdRoute: typeof MesaCompetitionIdRouteWithChildren
+  PesagemCompetitionIdRoute: typeof PesagemCompetitionIdRoute
+  PodioCompetitionIdRoute: typeof PodioCompetitionIdRoute
   ScoreboardMatchIdRoute: typeof ScoreboardMatchIdRoute
   TvCompetitionIdRoute: typeof TvCompetitionIdRoute
   LangEventEventIdRoute: typeof LangEventEventIdRouteWithChildren
+  ApiWebhooksStripeRoute: typeof ApiWebhooksStripeRoute
   DisplayMatCompetitionIdMatRoute: typeof DisplayMatCompetitionIdMatRoute
 }
 
@@ -484,6 +536,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CCompetitionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/chamada/$competitionId': {
+      id: '/chamada/$competitionId'
+      path: '/chamada/$competitionId'
+      fullPath: '/chamada/$competitionId'
+      preLoaderRoute: typeof ChamadaCompetitionIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/check-in/$code': {
       id: '/check-in/$code'
       path: '/check-in/$code'
@@ -517,6 +576,20 @@ declare module '@tanstack/react-router' {
       path: '/mesa/$competitionId'
       fullPath: '/mesa/$competitionId'
       preLoaderRoute: typeof MesaCompetitionIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pesagem/$competitionId': {
+      id: '/pesagem/$competitionId'
+      path: '/pesagem/$competitionId'
+      fullPath: '/pesagem/$competitionId'
+      preLoaderRoute: typeof PesagemCompetitionIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/podio/$competitionId': {
+      id: '/podio/$competitionId'
+      path: '/podio/$competitionId'
+      fullPath: '/podio/$competitionId'
+      preLoaderRoute: typeof PodioCompetitionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/scoreboard/$matchId': {
@@ -567,6 +640,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/events/new'
       preLoaderRoute: typeof AuthenticatedEventsNewRouteImport
       parentRoute: typeof AuthenticatedRoute
+    }
+    '/api/webhooks/stripe': {
+      id: '/api/webhooks/stripe'
+      path: '/api/webhooks/stripe'
+      fullPath: '/api/webhooks/stripe'
+      preLoaderRoute: typeof ApiWebhooksStripeRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/mesa/$competitionId/': {
       id: '/mesa/$competitionId/'
@@ -726,14 +806,18 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AuthRoute: AuthRoute,
   CCompetitionIdRoute: CCompetitionIdRoute,
+  ChamadaCompetitionIdRoute: ChamadaCompetitionIdRoute,
   CheckInCodeRoute: CheckInCodeRoute,
   CheckInScanRoute: CheckInScanRoute,
   DisplayMatchIdRoute: DisplayMatchIdRoute,
   FFederationSlugRoute: FFederationSlugRoute,
   MesaCompetitionIdRoute: MesaCompetitionIdRouteWithChildren,
+  PesagemCompetitionIdRoute: PesagemCompetitionIdRoute,
+  PodioCompetitionIdRoute: PodioCompetitionIdRoute,
   ScoreboardMatchIdRoute: ScoreboardMatchIdRoute,
   TvCompetitionIdRoute: TvCompetitionIdRoute,
   LangEventEventIdRoute: LangEventEventIdRouteWithChildren,
+  ApiWebhooksStripeRoute: ApiWebhooksStripeRoute,
   DisplayMatCompetitionIdMatRoute: DisplayMatCompetitionIdMatRoute,
 }
 export const routeTree = rootRouteImport
