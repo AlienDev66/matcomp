@@ -31,6 +31,7 @@ import {
   reopenMatch,
   recalculateEtas,
   fetchEmailOutbox,
+  canManageCompetition,
   updateCompetition,
   updateCompetitionStatus,
   updateDivision,
@@ -92,22 +93,29 @@ function EventAdminPage() {
     queryKey: ["federations"],
     queryFn: fetchFederations,
   });
+  const { data: canManageRpc } = useQuery({
+    queryKey: ["can-manage-comp", competitionId, user?.id],
+    queryFn: () => canManageCompetition(competitionId),
+    enabled: !!user && !!competitionId,
+  });
 
   const isManager =
-    !!user &&
-    !!competition &&
-    (competition.created_by === user.id ||
-      (!!competition.academy_id && staffAcademies.some((a) => a.id === competition.academy_id)));
+    !!canManageRpc ||
+    (!!user &&
+      !!competition &&
+      (competition.created_by === user.id ||
+        (!!competition.academy_id &&
+          staffAcademies.some((a) => a.id === competition.academy_id))));
 
   const { data: eventStaff = [] } = useQuery({
     queryKey: ["event-staff", competitionId],
     queryFn: () => fetchEventStaff(competitionId),
-    enabled: isManager,
+    enabled: !!isManager,
   });
   const { data: emailOutbox = [] } = useQuery({
     queryKey: ["email-outbox", competitionId],
     queryFn: () => fetchEmailOutbox(competitionId),
-    enabled: isManager,
+    enabled: !!isManager,
   });
 
   const canSelfRegister =

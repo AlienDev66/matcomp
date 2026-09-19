@@ -95,7 +95,12 @@ function HomeHubPage() {
             </div>
             <div className="flex flex-wrap gap-2">
               <Button asChild className="rounded-none bg-primary hover:bg-primary/90">
-                <Link to="/events/new">
+                <Link to="/organizer">
+                  <Building2 className="mr-2 h-4 w-4" /> Organizador
+                </Link>
+              </Button>
+              <Button asChild className="rounded-none bg-primary hover:bg-primary/90">
+                <Link to="/events/new" search={{ organizer: undefined }}>
                   <CalendarPlus className="mr-2 h-4 w-4" /> Criar evento
                 </Link>
               </Button>
@@ -220,7 +225,7 @@ function HomeHubPage() {
           {highlight.length === 0 ? (
             <p className="border border-dashed border-white/15 py-10 text-center text-sm text-white/40">
               Ainda sem eventos próximos.{" "}
-              <Link to="/events/new" className="text-primary hover:underline">
+              <Link to="/events/new" search={{ organizer: undefined }} className="text-primary hover:underline">
                 Cria o primeiro
               </Link>
             </p>
