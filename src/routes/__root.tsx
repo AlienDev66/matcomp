@@ -8,7 +8,7 @@ import {
   Scripts,
   redirect,
 } from "@tanstack/react-router";
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 
 import appCss from "../styles.css?url";
 import { AuthProvider } from "../hooks/useAuth";
@@ -135,6 +135,14 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const path = window.location.pathname;
+    if (path.startsWith("/mesa") || path.startsWith("/scoreboard") || path.startsWith("/display")) {
+      void navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

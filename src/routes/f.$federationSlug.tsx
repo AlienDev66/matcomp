@@ -1,9 +1,17 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchFederationBySlug } from "@/lib/competition/federations";
+import {
+  ensureFederationAdmin,
+  fetchPendingFederationEvents,
+  isFederationAdmin,
+  setFederationApproval,
+} from "@/lib/competition/api";
 import { EventDiscovery } from "@/components/EventDiscovery";
 import { Logo } from "@/components/Logo";
 import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/f/$federationSlug")({
   head: ({ params }) => ({
@@ -14,10 +22,21 @@ export const Route = createFileRoute("/f/$federationSlug")({
 
 function FederationLayout() {
   const { federationSlug } = Route.useParams();
-  const { session } = useAuth();
+  const { session, user } = useAuth();
+  const qc = useQueryClient();
   const { data: federation, isLoading } = useQuery({
     queryKey: ["federation", federationSlug],
     queryFn: () => fetchFederationBySlug(federationSlug),
+  });
+  const { data: isAdmin } = useQuery({
+    queryKey: ["fed-admin", federation?.id, user?.id],
+    queryFn: () => isFederationAdmin(federation!.id),
+    enabled: !!federation && !!user,
+  });
+  const { data: pending = [] } = useQuery({
+    queryKey: ["fed-pending", federation?.id],
+    queryFn: () => fetchPendingFederationEvents(federation!.id),
+    enabled: !!federation && !!isAdmin,
   });
 
   if (isLoading) {
@@ -91,7 +110,76 @@ function FederationLayout() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-8">
+      <main className="mx-auto max-w-6xl px-4 py-8 space-y-8">
+        {user && !isAdmin && (
+          <div className="border border-white/10 p-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-white/50">
+              Queres gerir aprovações desta federação neste browser?
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="border-white/15"
+              onClick={async () => {
+                try {
+                  await ensureFederationAdmin(federation.id, user.id);
+                  toast.success("És admin desta federação");
+                  await qc.invalidateQueries({ queryKey: ["fed-admin", federation.id] });
+                } catch (err: any) {
+                  toast.error(err.message);
+                }
+              }}
+            >
+              Tornar-me admin (demo)
+            </Button>
+          </div>
+        )}
+
+        {isAdmin && pending.length > 0 && (
+          <section className="border border-primary/30 bg-primary/5 p-5 space-y-3">
+            <h2 className="font-display text-lg font-semibold">Pedidos de aprovação</h2>
+            {pending.map((c) => (
+              <div
+                key={c.id}
+                className="flex flex-wrap items-center justify-between gap-3 border border-white/10 px-4 py-3"
+              >
+                <div>
+                  <p className="font-medium">{c.name}</p>
+                  <p className="text-xs text-white/40">{c.venue ?? "—"}</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="bg-primary hover:bg-primary/90"
+                    onClick={async () => {
+                      await setFederationApproval(c.id, "approved");
+                      toast.success("Aprovado");
+                      await qc.invalidateQueries({ queryKey: ["fed-pending", federation.id] });
+                    }}
+                  >
+                    Aprovar
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="border-white/15"
+                    onClick={async () => {
+                      await setFederationApproval(c.id, "rejected");
+                      toast.message("Rejeitado");
+                      await qc.invalidateQueries({ queryKey: ["fed-pending", federation.id] });
+                    }}
+                  >
+                    Rejeitar
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </section>
+        )}
+
         <EventDiscovery
           federationId={federation.id}
           federation={federation}

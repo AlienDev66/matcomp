@@ -233,6 +233,24 @@ function RegisterWizardPage() {
         for (const e of created) {
           await markEntryPaid(e.id, { amount_paid_cents: 0 });
         }
+        try {
+          const { queueAndSendEmail } = await import("@/lib/email.server");
+          if (session.user.email) {
+            await queueAndSendEmail({
+              data: {
+                type: "entry_confirmed",
+                toEmail: session.user.email,
+                competitionId: eventId,
+                payload: {
+                  competitionName: competition?.name,
+                  athleteName: athlete.full_name,
+                },
+              },
+            });
+          }
+        } catch {
+          /* ignore email failures */
+        }
         toast.success("Inscrições confirmadas");
         void qc.invalidateQueries({ queryKey: ["entries", eventId] });
         window.location.href = `/${safeLang}/event/${eventId}`;
