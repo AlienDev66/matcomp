@@ -1,5 +1,5 @@
-/* TEAM FS Display — focused service worker (do NOT cache payment app indiscriminately). */
-const CACHE = "teamfs-display-v1";
+/* MatComp Display — focused service worker (do NOT cache payment app indiscriminately). */
+const CACHE = "matcomp-display-v1";
 const PRECACHE = [
   "/display",
   "/display/",
@@ -19,7 +19,15 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k.startsWith("teamfs-display-") && k !== CACHE).map((k) => caches.delete(k))),
+      Promise.all(
+        keys
+          .filter(
+            (k) =>
+              (k.startsWith("matcomp-display-") || k.startsWith("teamfs-display-")) &&
+              k !== CACHE,
+          )
+          .map((k) => caches.delete(k)),
+      ),
     ),
   );
   self.clients.claim();
