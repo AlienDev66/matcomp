@@ -8,15 +8,21 @@ import { uploadEventCover } from "@/lib/event-cover";
 import {
   addEntry,
   createDivision,
+  createDivisionTemplate,
+  createEventStaff,
   createIbjjfAdultGiTemplate,
   fetchAthletes,
   fetchCompetition,
   fetchDivisions,
   fetchEntries,
+  fetchEventStaff,
   fetchMatches,
   fetchMyAcademies,
   fetchMyAthleteMemberships,
   generateBracket,
+  redistributeMats,
+  requestFederationApproval,
+  revokeEventStaff,
   selfRegisterForCompetition,
   setEntryApproved,
   setMatchWinner,
@@ -26,7 +32,10 @@ import {
   updateMatch,
 } from "@/lib/competition/api";
 import { fetchFederations } from "@/lib/competition/federations";
+import { DIVISION_TEMPLATE_META, type DivisionTemplatePreset } from "@/lib/competition/eligibility";
+import { BRACKET_FORMAT_LABEL, type BracketFormat } from "@/lib/competition/bracket";
 import { formatPrice, STATUS_LABEL, type CompetitionStatus } from "@/lib/competition/types";
+import { sendEventReminders, queueAndSendEmail } from "@/lib/email.server";
 import { AppChrome } from "@/components/AppChrome";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -85,6 +94,12 @@ function EventAdminPage() {
     (competition.created_by === user.id ||
       (!!competition.academy_id && staffAcademies.some((a) => a.id === competition.academy_id)));
 
+  const { data: eventStaff = [] } = useQuery({
+    queryKey: ["event-staff", competitionId],
+    queryFn: () => fetchEventStaff(competitionId),
+    enabled: isManager,
+  });
+
   const canSelfRegister =
     competition?.status === "registration" &&
     myAthletes.length > 0 &&
@@ -95,6 +110,7 @@ function EventAdminPage() {
   const [athleteId, setAthleteId] = useState("");
   const [divisionId, setDivisionId] = useState("");
   const [matAssign, setMatAssign] = useState("1");
+  const [bracketFormat, setBracketFormat] = useState<BracketFormat>("single_elim");
   const [selfDivId, setSelfDivId] = useState("");
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<"operacao" | "inscritos" | "categorias" | "pagina">("operacao");
@@ -296,8 +312,8 @@ function EventAdminPage() {
     setBusy(true);
     try {
       const mat = Math.min(matsCount, Math.max(1, Number(matAssign) || 1));
-      await generateBracket(competitionId, div, ids, { matNumber: mat });
-      toast.success(`Chave gerada no tatâmi ${mat}`);
+      await generateBracket(competitionId, div, ids, { matNumber: mat, format: bracketFormat });
+      toast.success(`Chave (${BRACKET_FORMAT_LABEL[bracketFormat]}) no tatâmi ${mat}`);
       await refresh();
     } catch (err: any) {
       toast.error(err.message);
@@ -318,7 +334,10 @@ function EventAdminPage() {
           .filter((e) => e.division_id === d.id && e.approved !== false)
           .map((e) => e.athlete_id);
         if (ids.length < 2) continue;
-        await generateBracket(competitionId, d.id, ids, { matNumber: mat });
+        await generateBracket(competitionId, d.id, ids, {
+          matNumber: mat,
+          format: bracketFormat,
+        });
         made += 1;
         mat = mat >= maxMat ? 1 : mat + 1;
       }
@@ -347,8 +366,38 @@ function EventAdminPage() {
 
   const toggleApproved = async (entryId: string, approved: boolean) => {
     try {
-      await setEntryApproved(entryId, approved);
+      const entry = await setEntryApproved(entryId, approved);
       toast.success(approved ? "Inscrição aprovada" : "Inscrição desaprovada");
+      if (approved) {
+        const ath = entry.athlete;
+        // best-effort email
+        void (async () => {
+          try {
+            const { data: profile } = ath?.user_id
+              ? await (await import("@/integrations/supabase/client")).supabase
+                  .from("profiles")
+                  .select("email")
+                  .eq("user_id", ath.user_id)
+                  .maybeSingle()
+              : { data: null };
+            if (profile?.email) {
+              await queueAndSendEmail({
+                data: {
+                  type: "entry_approved",
+                  toEmail: profile.email,
+                  competitionId,
+                  payload: {
+                    competitionName: competition?.name,
+                    athleteName: ath?.full_name,
+                  },
+                },
+              });
+            }
+          } catch {
+            /* ignore */
+          }
+        })();
+      }
       await refresh();
     } catch (err: any) {
       toast.error(err.message);
@@ -690,14 +739,49 @@ function EventAdminPage() {
               <section className="border border-border bg-card/40 p-5 space-y-4">
                 <h2 className="font-display text-lg font-semibold">Categorias e preços</h2>
                 <p className="text-xs text-muted-foreground">
-                  Template IBJJF (grupo + cinturões × pesos) ou categoria avulsa.
+                  Templates IBJJF-like (Adult / Master / Juvenile / Kids / No-Gi) ou categoria avulsa.
                 </p>
                 <div className="flex flex-wrap gap-2">
+                  {(Object.keys(DIVISION_TEMPLATE_META) as DivisionTemplatePreset[]).flatMap(
+                    (preset) =>
+                      (["male", "female"] as const).map((gender) => (
+                        <Button
+                          key={`${preset}-${gender}`}
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="border-white/15"
+                          disabled={busy}
+                          onClick={async () => {
+                            setBusy(true);
+                            try {
+                              await createDivisionTemplate(competitionId, {
+                                preset,
+                                gender,
+                                price_cents: Math.round(
+                                  (Number(divPrice.replace(",", ".")) || 50) * 100,
+                                ),
+                              });
+                              toast.success(
+                                `${gender === "male" ? "Male" : "Female"} · ${DIVISION_TEMPLATE_META[preset].label}`,
+                              );
+                              await refresh();
+                            } catch (err: any) {
+                              toast.error(err.message);
+                            } finally {
+                              setBusy(false);
+                            }
+                          }}
+                        >
+                          + {gender === "male" ? "M" : "F"} {DIVISION_TEMPLATE_META[preset].label}
+                        </Button>
+                      )),
+                  )}
                   <Button
                     type="button"
                     size="sm"
-                    variant="outline"
-                    className="border-white/15"
+                    variant="ghost"
+                    className="text-white/40"
                     disabled={busy}
                     onClick={async () => {
                       setBusy(true);
@@ -706,7 +790,6 @@ function EventAdminPage() {
                           gender: "male",
                           price_cents: Math.round((Number(divPrice.replace(",", ".")) || 50) * 100),
                         });
-                        toast.success("Template Male Gi Adult criado");
                         await refresh();
                       } catch (err: any) {
                         toast.error(err.message);
@@ -715,31 +798,7 @@ function EventAdminPage() {
                       }
                     }}
                   >
-                    + Male Gi Adult (IBJJF)
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="border-white/15"
-                    disabled={busy}
-                    onClick={async () => {
-                      setBusy(true);
-                      try {
-                        await createIbjjfAdultGiTemplate(competitionId, {
-                          gender: "female",
-                          price_cents: Math.round((Number(divPrice.replace(",", ".")) || 50) * 100),
-                        });
-                        toast.success("Template Female Gi Adult criado");
-                        await refresh();
-                      } catch (err: any) {
-                        toast.error(err.message);
-                      } finally {
-                        setBusy(false);
-                      }
-                    }}
-                  >
-                    + Female Gi Adult (IBJJF)
+                    (legado Adult Gi)
                   </Button>
                 </div>
                 <form onSubmit={addDiv} className="grid grid-cols-[1fr_88px_auto] gap-2">
@@ -945,9 +1004,24 @@ function EventAdminPage() {
             <section className="border border-border bg-card/40 p-5 space-y-4">
               <h2 className="font-display text-lg font-semibold">Gerar chaves</h2>
               <p className="text-sm text-muted-foreground">
-                Escolhe uma categoria com pelo menos 2 inscritos aprovados, atribui tatâmi e gera a
-                chave. Depois abre a mesa desse tatâmi para pontuar.
+                Escolhe formato, categoria (≥2 aprovados) e tatâmi. BYEs são marcados e resolvidos
+                automaticamente.
               </p>
+              <Select
+                value={bracketFormat}
+                onValueChange={(v) => setBracketFormat(v as BracketFormat)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Formato…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(BRACKET_FORMAT_LABEL) as BracketFormat[]).map((f) => (
+                    <SelectItem key={f} value={f}>
+                      {BRACKET_FORMAT_LABEL[f]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Select value={divisionId} onValueChange={setDivisionId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Categoria (entry)…" />
@@ -986,15 +1060,236 @@ function EventAdminPage() {
                   Gerar chave
                 </Button>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={busy}
-                onClick={() => void genReadyDivisions()}
-                className="w-full border-white/15"
-              >
-                Gerar todas (distribuir pelos {matsCount} tatâmis)
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => void genReadyDivisions()}
+                  className="flex-1 border-white/15"
+                >
+                  Gerar todas ({BRACKET_FORMAT_LABEL[bracketFormat]})
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  className="border-white/15"
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      await redistributeMats(competitionId, matsCount);
+                      toast.success("Tatâmis redistribuídos");
+                      await refresh();
+                    } catch (err: any) {
+                      toast.error(err.message);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  Redistribuir tatâmis
+                </Button>
+              </div>
+            </section>
+
+            <section className="border border-border bg-card/40 p-5 space-y-4">
+              <h2 className="font-display text-lg font-semibold">Staff do evento (mesa / árbitro)</h2>
+              <p className="text-sm text-muted-foreground">
+                Gera links com token — a pessoa pontua sem acesso total ao admin.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {Array.from({ length: matsCount }, (_, i) => i + 1).map((mat) => (
+                  <Button
+                    key={mat}
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="border-white/15"
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      try {
+                        const s = await createEventStaff(competitionId, {
+                          role: "mesa",
+                          mat_number: mat,
+                          label: `Mesa tatâmi ${mat}`,
+                        });
+                        const url = `${window.location.origin}/mesa/${competitionId}/${mat}?token=${s.token}`;
+                        await navigator.clipboard.writeText(url);
+                        toast.success(`Link mesa ${mat} copiado`);
+                        await qc.invalidateQueries({ queryKey: ["event-staff", competitionId] });
+                      } catch (err: any) {
+                        toast.error(err.message);
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    + Token mesa {mat}
+                  </Button>
+                ))}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="border-white/15"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      const s = await createEventStaff(competitionId, {
+                        role: "referee",
+                        label: "Árbitro",
+                      });
+                      const url = `${window.location.origin}/mesa/${competitionId}?token=${s.token}`;
+                      await navigator.clipboard.writeText(url);
+                      toast.success("Link árbitro copiado");
+                      await qc.invalidateQueries({ queryKey: ["event-staff", competitionId] });
+                    } catch (err: any) {
+                      toast.error(err.message);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  + Token árbitro
+                </Button>
+              </div>
+              <ul className="space-y-2 text-sm">
+                {eventStaff
+                  .filter((s) => s.active)
+                  .map((s) => (
+                    <li
+                      key={s.id}
+                      className="flex flex-wrap items-center justify-between gap-2 border border-white/10 px-3 py-2"
+                    >
+                      <span>
+                        {s.label ?? s.role}
+                        {s.mat_number ? ` · tatâmi ${s.mat_number}` : ""} ·{" "}
+                        <code className="text-xs text-white/40">{s.token.slice(0, 8)}…</code>
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={async () => {
+                          await revokeEventStaff(s.id);
+                          await qc.invalidateQueries({ queryKey: ["event-staff", competitionId] });
+                        }}
+                      >
+                        Revogar
+                      </Button>
+                    </li>
+                  ))}
+              </ul>
+            </section>
+
+            <section className="border border-border bg-card/40 p-5 space-y-3">
+              <h2 className="font-display text-lg font-semibold">Export / emails / federação</h2>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="border-white/15"
+                  onClick={() => {
+                    const rows = [
+                      ["match_id", "mat", "round", "status", "a", "b", "score_a", "score_b", "winner", "method", "side"],
+                      ...matches.map((m) => [
+                        m.id,
+                        m.mat_number,
+                        m.round_index,
+                        m.status,
+                        m.athlete_a?.full_name ?? "",
+                        m.athlete_b?.full_name ?? "",
+                        m.score_a,
+                        m.score_b,
+                        m.winner_id ?? "",
+                        m.win_method ?? "",
+                        m.bracket_side ?? "",
+                      ]),
+                    ];
+                    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+                    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+                    const a = document.createElement("a");
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `matcomp-${competitionId.slice(0, 8)}-results.csv`;
+                    a.click();
+                  }}
+                >
+                  CSV resultados
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="border-white/15"
+                  onClick={() => {
+                    const rows = [
+                      ["entry_id", "athlete", "division", "approved", "paid"],
+                      ...entries.map((e) => [
+                        e.id,
+                        e.athlete?.full_name ?? e.athlete_id,
+                        divisions.find((d) => d.id === e.division_id)?.name ?? "",
+                        e.approved !== false,
+                        !!e.paid,
+                      ]),
+                    ];
+                    const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+                    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+                    const a = document.createElement("a");
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `matcomp-${competitionId.slice(0, 8)}-entries.csv`;
+                    a.click();
+                  }}
+                >
+                  CSV inscritos
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="border-white/15"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      const r = await sendEventReminders({ data: { competitionId } });
+                      toast.success(`${r.sent} lembrete(s) na outbox`);
+                    } catch (err: any) {
+                      toast.error(err.message);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  Enviar lembretes
+                </Button>
+                {competition.federation_id && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="border-white/15"
+                    disabled={busy || competition.federation_approval === "pending"}
+                    onClick={async () => {
+                      setBusy(true);
+                      try {
+                        await requestFederationApproval(competitionId);
+                        toast.success("Pedido de aprovação enviado");
+                        await qc.invalidateQueries({ queryKey: ["competition", competitionId] });
+                      } catch (err: any) {
+                        toast.error(err.message);
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    Federação: {competition.federation_approval ?? "none"}
+                  </Button>
+                )}
+              </div>
             </section>
 
         {(true) && (

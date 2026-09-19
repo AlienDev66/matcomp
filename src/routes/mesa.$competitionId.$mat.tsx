@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import {
   fetchCompetition,
   fetchDivisions,
@@ -10,17 +10,27 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/Logo";
 import { WIN_METHOD_LABEL, type WinMethod } from "@/lib/competition/types";
+import { getMesaToken, mesaTokenFromSearch, setMesaToken } from "@/lib/mesa-token";
 
 export const Route = createFileRoute("/mesa/$competitionId/$mat")({
   head: ({ params }) => ({
     meta: [{ title: `Mesa tatâmi ${params.mat} — MatComp` }],
+  }),
+  validateSearch: (search: Record<string, unknown>) => ({
+    token: typeof search.token === "string" ? search.token : undefined,
   }),
   component: MesaMatPage,
 });
 
 function MesaMatPage() {
   const { competitionId, mat: matParam } = Route.useParams();
+  const search = Route.useSearch();
   const mat = Math.max(1, Number(matParam) || 1);
+
+  useEffect(() => {
+    const t = search.token || mesaTokenFromSearch(window.location.search);
+    if (t) setMesaToken(t);
+  }, [search.token]);
 
   const { data: competition } = useQuery({
     queryKey: ["mesa-comp", competitionId],
@@ -65,7 +75,16 @@ function MesaMatPage() {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button asChild variant="outline" size="sm" className="border-white/15">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="border-white/15 print:hidden"
+              onClick={() => window.print()}
+            >
+              Imprimir fila
+            </Button>
+            <Button asChild variant="outline" size="sm" className="border-white/15 print:hidden">
               <Link to="/mesa/$competitionId" params={{ competitionId }}>
                 Todas as mesas
               </Link>
@@ -74,7 +93,12 @@ function MesaMatPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-8 space-y-8">
+      <main className="mx-auto max-w-5xl px-4 py-8 space-y-8 mesa-print-root">
+        {getMesaToken() && (
+          <p className="text-xs text-emerald-400/80 print:hidden">
+            Sessão mesa ativa (token) — podes pontuar sem login de admin.
+          </p>
+        )}
         <div className="border border-primary/40 bg-primary/10 p-5 flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-[10px] uppercase tracking-[0.25em] text-primary">Esta mesa</p>

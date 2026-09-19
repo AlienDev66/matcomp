@@ -8,10 +8,13 @@ import {
   fetchDivisions,
   fetchMatches,
   claimMatchOnMat,
+  mesaUpdateMatch,
+  mesaSetWinner,
 } from "@/lib/competition/api";
 import { WIN_METHOD_BTN, WIN_METHOD_LABEL, type WinMethod } from "@/lib/competition/types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { getMesaToken, mesaTokenFromSearch, setMesaToken } from "@/lib/mesa-token";
 
 export const Route = createFileRoute("/scoreboard/$matchId")({
   head: () => ({ meta: [{ title: "Mesa — MatComp" }] }),
@@ -25,6 +28,12 @@ function MesaScoreboardPage() {
   const { matchId } = Route.useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
+
+  useEffect(() => {
+    const fromUrl = mesaTokenFromSearch(window.location.search);
+    if (fromUrl) setMesaToken(fromUrl);
+  }, []);
+
   const { data: match } = useQuery({
     queryKey: ["match", matchId],
     queryFn: () => fetchMatch(matchId),
@@ -49,14 +58,52 @@ function MesaScoreboardPage() {
   const tick = useRef<number | null>(null);
   const synced = useRef(false);
 
+  const persistMatch = async (patch: Record<string, unknown>) => {
+    const token = getMesaToken();
+    if (token) {
+      await mesaUpdateMatch(matchId, token, patch);
+    } else {
+      await updateMatch(matchId, patch as never);
+    }
+  };
+
   // Reset sync when navigating to another match; claim this fight on the tatâmi
   // so the TV display follows here after "Próxima luta".
   useEffect(() => {
     synced.current = false;
     setMode("score");
-    void claimMatchOnMat(matchId).catch(() => {
-      /* ignore — display still works from scores */
-    });
+    void claimMatchOnMat(matchId)
+      .then(async (m) => {
+        try {
+          const { queueAndSendEmail } = await import("@/lib/email.server");
+          const { supabase } = await import("@/integrations/supabase/client");
+          for (const ath of [m?.athlete_a, m?.athlete_b]) {
+            if (!ath?.user_id) continue;
+            const { data: profile } = await supabase
+              .from("profiles")
+              .select("email")
+              .eq("user_id", ath.user_id)
+              .maybeSingle();
+            if (!profile?.email) continue;
+            await queueAndSendEmail({
+              data: {
+                type: "queue_call",
+                toEmail: profile.email,
+                competitionId: m.competition_id,
+                payload: {
+                  athleteName: ath.full_name,
+                  mat: m.mat_number,
+                },
+              },
+            });
+          }
+        } catch {
+          /* ignore */
+        }
+      })
+      .catch(() => {
+        /* ignore — display still works from scores / token mesa */
+      });
   }, [matchId]);
 
   useEffect(() => {
@@ -83,7 +130,7 @@ function MesaScoreboardPage() {
       setSeconds((s) => {
         const next = Math.max(0, s - 1);
         if (next % 5 === 0 || next === 0) {
-          void updateMatch(matchId, { clock_seconds: next, clock_running: next > 0 });
+          void persistMatch({ clock_seconds: next, clock_running: next > 0 });
         }
         return next;
       });
@@ -121,7 +168,7 @@ function MesaScoreboardPage() {
             ? (match.penalties_a ?? 0)
             : (match.penalties_b ?? 0);
     try {
-      await updateMatch(matchId, {
+      await persistMatch({
         [key]: Math.max(0, current + delta),
         status: "live",
       });
@@ -135,7 +182,7 @@ function MesaScoreboardPage() {
     const next = Math.max(0, seconds + delta);
     setSeconds(next);
     try {
-      await updateMatch(matchId, { clock_seconds: next });
+      await persistMatch({ clock_seconds: next });
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -145,7 +192,7 @@ function MesaScoreboardPage() {
     const next = !running;
     setRunning(next);
     try {
-      await updateMatch(matchId, {
+      await persistMatch({
         clock_seconds: seconds,
         clock_running: next,
         status: "live",
@@ -157,7 +204,12 @@ function MesaScoreboardPage() {
 
   const declareWin = async (winnerId: string, method: WinMethod) => {
     try {
-      await setMatchWinner(matchId, winnerId, method);
+      const token = getMesaToken();
+      if (token) {
+        await mesaSetWinner(matchId, token, winnerId, method);
+      } else {
+        await setMatchWinner(matchId, winnerId, method);
+      }
       setRunning(false);
       setMode("won");
       toast.success("Luta terminada");
@@ -213,6 +265,42 @@ function MesaScoreboardPage() {
       void navigate({ to: "/scoreboard/$matchId", params: { matchId: nextMatch.id } });
     })();
   };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const k = e.key.toLowerCase();
+      if (k === " " || k === "spacebar") {
+        e.preventDefault();
+        void toggleClock();
+        return;
+      }
+      if (k === "s") {
+        e.preventDefault();
+        const next = !swapped;
+        setSwapped(next);
+        void persistMatch({ sides_swapped: next });
+        return;
+      }
+      if (k === "n") {
+        e.preventDefault();
+        goNext();
+        return;
+      }
+      if (mode !== "score" || !match) return;
+      const topSide = swapped ? "b" : "a";
+      const botSide = swapped ? "a" : "b";
+      if (k === "1") void bump(topSide, "score", 1);
+      if (k === "2") void bump(topSide, "score", 2);
+      if (k === "3") void bump(topSide, "score", 3);
+      if (k === "q") void bump(botSide, "score", 1);
+      if (k === "w") void bump(botSide, "score", 2);
+      if (k === "e") void bump(botSide, "score", 3);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   if (!match) {
     return (
@@ -352,13 +440,16 @@ function MesaScoreboardPage() {
               onClick={() => {
                 const next = !swapped;
                 setSwapped(next);
-                void updateMatch(matchId, { sides_swapped: next })
+                void persistMatch({ sides_swapped: next })
                   .then(() => qc.invalidateQueries({ queryKey: ["match", matchId] }))
                   .catch((err: any) => toast.error(err.message));
               }}
             >
               Trocar lados
             </FooterBtn>
+            <span className="text-[10px] text-white/30 self-center hidden md:inline">
+              Teclas: 1/2/3 · Q/W/E · Space · S · N
+            </span>
             {match.competition_id && (
               <>
                 <Link
