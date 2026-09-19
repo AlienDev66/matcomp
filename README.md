@@ -32,8 +32,10 @@ SQL Editor → corre **por ordem**:
 9. `supabase/migrations/20260919250000_mats_count.sql`
 10. `supabase/migrations/20260919260000_sides_swapped.sql`
 11. `supabase/migrations/20260919270000_sprint_ops.sql`
+12. `supabase/migrations/20260919280000_day_ops_eta_tokens.sql`
+13. `supabase/migrations/20260919290000_day_stations.sql`
 
-As migrations 4–5 acrescentam pagamentos, rankings, federações, bucket de capas, e roster só com contas MatComp (add by email / remove). A 9 define `mats_count`. A 10 sincroniza trocar lados. A 11: formatos de chave, event_staff/tokens mesa, aprovação federação, email_outbox.
+As migrations 4–5 acrescentam pagamentos, rankings, federações, bucket de capas, e roster só com contas MatComp (add by email / remove). A 9 define `mats_count`. A 10 sincroniza trocar lados. A 11: formatos de chave, event_staff/tokens mesa, aprovação federação, email_outbox. A 12: pesagem oficial, pausar tatâmi, expiração de tokens mesa, ETA. A 13: estações do dia (pesagem / chamada / pódio) + filas.
 
 ### 2. Env
 
@@ -44,9 +46,15 @@ cp .env.example .env.local
 ```
 VITE_SUPABASE_URL=…
 VITE_SUPABASE_PUBLISHABLE_KEY=…
-STRIPE_SECRET_KEY=sk_test_…   # opcional até beta pagos
+STRIPE_SECRET_KEY=sk_test_…          # checkout
+STRIPE_WEBHOOK_SECRET=whsec_…        # POST /api/webhooks/stripe
 APP_URL=http://localhost:3000
+SUPABASE_SERVICE_ROLE_KEY=…          # webhook mark-paid + seed + emails
+RESEND_API_KEY=…                     # opcional; sem key → email_outbox
 ```
+
+Webhook Stripe (produção): aponta o endpoint Checkout para  
+`https://TEU_DOMINIO/api/webhooks/stripe` (eventos `checkout.session.completed`).
 
 ### 3. Dev
 
@@ -92,12 +100,13 @@ Eventos seed: **Barcelos LIVE** (4 tatâmis + muitas lutas), **Porto** (inscriç
 
 ## Security checklist (RLS)
 
-- [ ] Migrations 1–11 corridas; RLS activo em `competitions`, `matches`, `entries`, `event_staff`, `email_outbox`, `federation_admins`
-- [ ] `SUPABASE_SERVICE_ROLE_KEY` só no servidor / seed — nunca no browser
-- [ ] Tokens de mesa: partilhar só por canal seguro; revogar após o evento
-- [ ] `RESEND_API_KEY` só server-side; outbox guarda PII (emails) — acesso manager-only
-- [ ] Scoreboard writes: manager auth **ou** `mesa_*` RPCs com token válido
-- [ ] Federação: só `federation_admins` aprova eventos (`federation_approval`)
+- [ ] Migrations 1–12 corridas; RLS activo em `competitions`, `matches`, `entries`, `event_staff`, `email_outbox`, `federation_admins`
+- [ ] `SUPABASE_SERVICE_ROLE_KEY` só no servidor / seed / webhook — nunca no browser
+- [ ] Tokens de mesa: partilhar só por canal seguro; expiram com `ends_at` (+12h) ou ao marcar evento `finished`
+- [ ] `RESEND_API_KEY` só server-side; outbox visível no admin do evento
+- [ ] Scoreboard writes: manager auth **ou** `mesa_*` RPCs com token válido / não expirado
+- [ ] Federação: só `federation_admins` aprova eventos; rankings recalc só conta `approved` ou `none`
+- [ ] Stripe: webhook com `STRIPE_WEBHOOK_SECRET` (não depender só do return URL)
 
 ## Testes
 
@@ -105,4 +114,4 @@ Eventos seed: **Barcelos LIVE** (4 tatâmis + muitas lutas), **Porto** (inscriç
 bun test
 ```
 
-Cobrem planners de chave (single / double / RR / consolação + BYEs).
+Cobrem planners de chave (single / double / RR / consolação + BYEs), ETA por fila/tatâmi, e checklist RLS documentado.
