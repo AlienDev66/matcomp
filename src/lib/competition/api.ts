@@ -349,6 +349,14 @@ export async function updateCompetitionStatus(competitionId: string, status: Com
     .select("*")
     .single();
   if (error) throw error;
+  // DB trigger also expires staff; this is belt-and-suspenders for older schemas.
+  if (status === "finished") {
+    await supabase
+      .from("event_staff")
+      .update({ active: false, expires_at: new Date().toISOString() } as never)
+      .eq("competition_id", competitionId)
+      .eq("active", true);
+  }
   return data as Competition;
 }
 
@@ -376,6 +384,7 @@ export type CompetitionUpdate = Partial<{
   federation_id: string | null;
   mats_count: number;
   federation_approval: "none" | "pending" | "approved" | "rejected";
+  paused_mats: number[];
 }>;
 
 export async function updateCompetition(competitionId: string, patch: CompetitionUpdate) {
@@ -859,6 +868,8 @@ export async function setMatchWinner(
       winner_id: winnerId,
       win_method: winMethod,
       clock_running: false,
+      call_a: "done",
+      call_b: "done",
     } as never)
     .eq("id", matchId);
   if (upErr) throw upErr;
@@ -882,6 +893,15 @@ export async function setMatchWinner(
       .update(patch as never)
       .eq("id", match.loser_next_match_id);
   }
+
+  // When a division final (or consolation) finishes, refresh podium queue
+  if (match.division_id) {
+    try {
+      await syncPodiumQueueForDivision(match.competition_id, match.division_id);
+    } catch (err) {
+      console.warn("[podium sync]", err);
+    }
+  }
 }
 
 export async function claimMatchOnMat(matchId: string) {
@@ -890,6 +910,11 @@ export async function claimMatchOnMat(matchId: string) {
   if (match.status === "finished") return match;
 
   const mat = match.mat_number || 1;
+  const competition = await fetchCompetition(match.competition_id);
+  if (competition?.paused_mats?.includes(mat)) {
+    throw new Error(`Tatâmi ${mat} está pausado.`);
+  }
+
   const siblings = await fetchMatches(match.competition_id);
   for (const m of siblings) {
     if (m.id === matchId) continue;
@@ -1088,8 +1113,25 @@ export async function createEventStaff(
     role: import("./types").EventStaffRole;
     mat_number?: number | null;
     label?: string;
+    expires_at?: string | null;
   },
 ) {
+  const competition = await fetchCompetition(competitionId);
+  let expiresAt = input.expires_at ?? null;
+  if (!expiresAt && competition) {
+    if (competition.ends_at) {
+      expiresAt = new Date(
+        new Date(competition.ends_at).getTime() + 12 * 60 * 60 * 1000,
+      ).toISOString();
+    } else if (competition.starts_at) {
+      expiresAt = new Date(
+        new Date(competition.starts_at).getTime() + 48 * 60 * 60 * 1000,
+      ).toISOString();
+    } else {
+      expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    }
+  }
+
   const { data, error } = await supabase
     .from("event_staff")
     .insert({
@@ -1098,6 +1140,7 @@ export async function createEventStaff(
       mat_number: input.mat_number ?? null,
       label: input.label ?? null,
       active: true,
+      expires_at: expiresAt,
     } as never)
     .select("*")
     .single();
@@ -1219,4 +1262,347 @@ export async function ensureFederationAdmin(federationId: string, userId: string
     { onConflict: "federation_id,user_id" },
   );
   if (error && !error.message.includes("duplicate")) throw error;
+}
+
+// ─── Day ops: weigh-in, reopen, pause, ETA ───────────────────────────────────
+
+export async function recordWeighIn(
+  entryId: string,
+  input: {
+    weigh_in_kg: number;
+    weigh_in_status: "passed" | "failed";
+  },
+) {
+  const { data, error } = await supabase
+    .from("competition_entries")
+    .update({
+      weigh_in_kg: input.weigh_in_kg,
+      weigh_in_status: input.weigh_in_status,
+      weigh_in_at: new Date().toISOString(),
+    } as never)
+    .eq("id", entryId)
+    .select("*, athlete:athletes(*)")
+    .single();
+  if (error) throw error;
+  return data as CompetitionEntry;
+}
+
+export async function setMatPaused(
+  competitionId: string,
+  matNumber: number,
+  paused: boolean,
+) {
+  const competition = await fetchCompetition(competitionId);
+  if (!competition) throw new Error("Evento não encontrado");
+  const current = new Set(competition.paused_mats ?? []);
+  if (paused) current.add(matNumber);
+  else current.delete(matNumber);
+  return updateCompetition(competitionId, { paused_mats: [...current].sort((a, b) => a - b) });
+}
+
+/** Undo a finished fight: clear winner, pull athletes back from next slots if still open. */
+export async function reopenMatch(matchId: string) {
+  const match = await fetchMatch(matchId);
+  if (!match) throw new Error("Luta não encontrada");
+  if (match.status !== "finished") {
+    throw new Error("Só podes reabrir lutas terminadas.");
+  }
+
+  const winnerId = match.winner_id;
+  const loserId =
+    match.athlete_a_id === winnerId
+      ? match.athlete_b_id
+      : match.athlete_b_id === winnerId
+        ? match.athlete_a_id
+        : null;
+
+  if (match.next_match_id && match.next_slot && winnerId) {
+    const next = await fetchMatch(match.next_match_id);
+    if (next && next.status !== "finished") {
+      const patch: Record<string, null> = {};
+      if (match.next_slot === "a" && next.athlete_a_id === winnerId) patch.athlete_a_id = null;
+      if (match.next_slot === "b" && next.athlete_b_id === winnerId) patch.athlete_b_id = null;
+      if (Object.keys(patch).length) {
+        await supabase
+          .from("competition_matches")
+          .update(patch as never)
+          .eq("id", match.next_match_id);
+      }
+    }
+  }
+
+  if (match.loser_next_match_id && match.loser_next_slot && loserId) {
+    const next = await fetchMatch(match.loser_next_match_id);
+    if (next && next.status !== "finished") {
+      const patch: Record<string, null> = {};
+      if (match.loser_next_slot === "a" && next.athlete_a_id === loserId) patch.athlete_a_id = null;
+      if (match.loser_next_slot === "b" && next.athlete_b_id === loserId) patch.athlete_b_id = null;
+      if (Object.keys(patch).length) {
+        await supabase
+          .from("competition_matches")
+          .update(patch as never)
+          .eq("id", match.loser_next_match_id);
+      }
+    }
+  }
+
+  const { data, error } = await supabase
+    .from("competition_matches")
+    .update({
+      status: "queued",
+      winner_id: null,
+      win_method: null,
+      clock_running: false,
+      sides_swapped: false,
+    } as never)
+    .eq("id", matchId)
+    .select(
+      "*, athlete_a:athletes!competition_matches_athlete_a_id_fkey(*), athlete_b:athletes!competition_matches_athlete_b_id_fkey(*)",
+    )
+    .single();
+  if (error) throw error;
+  const row = data as any;
+  return {
+    ...row,
+    athlete_a: row.athlete_a ?? null,
+    athlete_b: row.athlete_b ?? null,
+  } as CompetitionMatch;
+}
+
+export async function recalculateEtas(
+  competitionId: string,
+  opts?: { avgMatchSeconds?: number; gapSeconds?: number },
+) {
+  const { computeMatEtas } = await import("./eta");
+  const matches = await fetchMatches(competitionId);
+  const assignments = computeMatEtas(matches, opts);
+  for (const a of assignments) {
+    await supabase
+      .from("competition_matches")
+      .update({ estimated_start: a.estimated_start } as never)
+      .eq("id", a.matchId);
+  }
+  return fetchMatches(competitionId);
+}
+
+export async function fetchEmailOutbox(competitionId: string) {
+  const { data, error } = await supabase
+    .from("email_outbox")
+    .select("*")
+    .eq("competition_id", competitionId)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (error) throw error;
+  return (data ?? []) as {
+    id: string;
+    email_type: string;
+    to_email: string;
+    subject: string | null;
+    sent_at: string | null;
+    error: string | null;
+    created_at: string;
+  }[];
+}
+
+// ─── Day stations: pesagem / chamada / pódio ─────────────────────────────────
+
+export async function staffRecordWeighIn(
+  entryId: string,
+  token: string,
+  kg: number,
+  status: "passed" | "failed",
+) {
+  const { data, error } = await supabase.rpc("staff_record_weigh_in", {
+    _entry_id: entryId,
+    _token: token,
+    _kg: kg,
+    _status: status,
+  });
+  if (error) throw error;
+  return data as CompetitionEntry;
+}
+
+export async function staffSetMatchCall(
+  matchId: string,
+  token: string,
+  side: "a" | "b",
+  status: import("./types").AthleteCallStatus,
+) {
+  const { data, error } = await supabase.rpc("staff_set_match_call", {
+    _match_id: matchId,
+    _token: token,
+    _side: side,
+    _status: status,
+  });
+  if (error) throw error;
+  return data as CompetitionMatch;
+}
+
+export async function setMatchCall(
+  matchId: string,
+  side: "a" | "b",
+  status: import("./types").AthleteCallStatus,
+) {
+  const patch =
+    side === "a"
+      ? { call_a: status, call_a_at: new Date().toISOString() }
+      : { call_b: status, call_b_at: new Date().toISOString() };
+  const { data, error } = await supabase
+    .from("competition_matches")
+    .update(patch as never)
+    .eq("id", matchId)
+    .select(
+      "*, athlete_a:athletes!competition_matches_athlete_a_id_fkey(*), athlete_b:athletes!competition_matches_athlete_b_id_fkey(*)",
+    )
+    .single();
+  if (error) throw error;
+  const row = data as any;
+  return {
+    ...row,
+    athlete_a: row.athlete_a ?? null,
+    athlete_b: row.athlete_b ?? null,
+  } as CompetitionMatch;
+}
+
+export async function fetchPodiumCalls(competitionId: string) {
+  const { data, error } = await supabase
+    .from("podium_calls")
+    .select("*, athlete:athletes(id, full_name)")
+    .eq("competition_id", competitionId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []).map((row: any) => ({
+    ...row,
+    athlete: row.athlete ?? null,
+  })) as import("./types").PodiumCall[];
+}
+
+export async function staffSetPodiumStatus(
+  podiumId: string,
+  token: string,
+  status: import("./types").PodiumCallStatus,
+) {
+  const { data, error } = await supabase.rpc("staff_set_podium_status", {
+    _podium_id: podiumId,
+    _token: token,
+    _status: status,
+  });
+  if (error) throw error;
+  return data as import("./types").PodiumCall;
+}
+
+export async function setPodiumStatus(
+  podiumId: string,
+  status: import("./types").PodiumCallStatus,
+) {
+  const patch: Record<string, unknown> = { status };
+  if (status === "called") patch.called_at = new Date().toISOString();
+  if (status === "done" || status === "skipped") patch.done_at = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("podium_calls")
+    .update(patch as never)
+    .eq("id", podiumId)
+    .select("*, athlete:athletes(id, full_name)")
+    .single();
+  if (error) throw error;
+  const row = data as any;
+  return { ...row, athlete: row.athlete ?? null } as import("./types").PodiumCall;
+}
+
+/** Upsert podium rows from derived medals when a division has results. */
+export async function syncPodiumQueueForDivision(competitionId: string, divisionId: string) {
+  const { deriveMedals } = await import("./medals");
+  const matches = await fetchMatches(competitionId);
+  const divMatches = matches.filter((m) => m.division_id === divisionId);
+  const row = deriveMedals(divMatches).find((d) => d.divisionId === divisionId);
+  if (!row) return;
+
+  const inserts: {
+    competition_id: string;
+    division_id: string;
+    athlete_id: string;
+    medal: "gold" | "silver" | "bronze";
+  }[] = [];
+
+  if (row.gold) {
+    inserts.push({
+      competition_id: competitionId,
+      division_id: divisionId,
+      athlete_id: row.gold.athleteId,
+      medal: "gold",
+    });
+  }
+  if (row.silver) {
+    inserts.push({
+      competition_id: competitionId,
+      division_id: divisionId,
+      athlete_id: row.silver.athleteId,
+      medal: "silver",
+    });
+  }
+  for (const b of row.bronze) {
+    inserts.push({
+      competition_id: competitionId,
+      division_id: divisionId,
+      athlete_id: b.athleteId,
+      medal: "bronze",
+    });
+  }
+
+  if (inserts.length === 0) return;
+
+  const { error } = await supabase.from("podium_calls").upsert(inserts as never, {
+    onConflict: "competition_id,division_id,athlete_id,medal",
+    ignoreDuplicates: true,
+  });
+  if (error) throw error;
+}
+
+export async function syncAllPodiumQueues(competitionId: string) {
+  const matches = await fetchMatches(competitionId);
+  const divIds = [...new Set(matches.map((m) => m.division_id).filter(Boolean))] as string[];
+  for (const d of divIds) {
+    await syncPodiumQueueForDivision(competitionId, d);
+  }
+  return fetchPodiumCalls(competitionId);
+}
+
+/** Notify athlete via email/outbox when called to warmup/mat. */
+export async function notifyAthleteCall(opts: {
+  competitionId: string;
+  competitionName: string;
+  athleteId: string;
+  mat: number;
+  phase: "warmup" | "mat" | "weigh_in" | "podium";
+}) {
+  try {
+    const { data: athlete } = await supabase
+      .from("athletes")
+      .select("full_name, user_id")
+      .eq("id", opts.athleteId)
+      .maybeSingle();
+    if (!athlete?.user_id) return;
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("email")
+      .eq("user_id", athlete.user_id)
+      .maybeSingle();
+    if (!profile?.email) return;
+    const { queueAndSendEmail } = await import("@/lib/email.server");
+    await queueAndSendEmail({
+      data: {
+        type: "queue_call",
+        toEmail: profile.email,
+        competitionId: opts.competitionId,
+        payload: {
+          competitionName: opts.competitionName,
+          athleteName: athlete.full_name,
+          mat: opts.mat,
+          phase: opts.phase,
+        },
+      },
+    });
+  } catch (err) {
+    console.warn("[notifyAthleteCall]", err);
+  }
 }

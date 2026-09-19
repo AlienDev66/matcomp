@@ -27,7 +27,7 @@ function subjectFor(type: EmailType, competitionName?: string) {
     case "event_reminder":
       return `Lembrete: ${name}`;
     case "queue_call":
-      return `Estás na fila — ${name}`;
+      return `Chamada — ${name}`;
   }
 }
 
@@ -41,8 +41,18 @@ function bodyFor(type: EmailType, payload: Record<string, unknown>) {
       return `Olá ${athlete},\n\nA tua inscrição em ${name} foi aprovada. Bom torneio!\n\n— MatComp`;
     case "event_reminder":
       return `Olá ${athlete},\n\nLembrete: ${name} aproxima-se (${payload.startsAt ?? ""}).\n\n— MatComp`;
-    case "queue_call":
-      return `Olá ${athlete},\n\nA tua luta no tatâmi ${payload.mat ?? "?"} está a ser chamada / na fila.\n\n— MatComp`;
+    case "queue_call": {
+      const phase = String(payload.phase ?? "mat");
+      const where =
+        phase === "warmup"
+          ? "área de aquecimento"
+          : phase === "weigh_in"
+            ? "área de pesagem"
+            : phase === "podium"
+              ? "área de pódio"
+              : `tatâmi ${payload.mat ?? "?"}`;
+      return `Olá ${athlete},\n\nFoste chamado(a) para a ${where} (${name}).\n\n— MatComp`;
+    }
   }
 }
 
