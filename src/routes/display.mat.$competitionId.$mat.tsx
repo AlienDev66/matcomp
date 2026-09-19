@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { fetchDivisions, fetchMatches } from "@/lib/competition/api";
+import { fetchCompetition, fetchDivisions, fetchMatches } from "@/lib/competition/api";
 import { MatchDisplayView, pickMatDisplayMatch } from "@/components/MatchDisplay";
+import { useCompetitionRealtime } from "@/hooks/useCompetitionRealtime";
 
 export const Route = createFileRoute("/display/mat/$competitionId/$mat")({
   head: ({ params }) => ({
@@ -15,10 +16,24 @@ function MatDisplayPage() {
   const { competitionId, mat: matParam } = Route.useParams();
   const mat = Math.max(1, Number(matParam) || 1);
 
+  useCompetitionRealtime(
+    competitionId,
+    [
+      ["display-mat-matches", competitionId],
+      ["display-comp", competitionId],
+    ],
+    { includeCompetition: true },
+  );
+
+  const { data: competition } = useQuery({
+    queryKey: ["display-comp", competitionId],
+    queryFn: () => fetchCompetition(competitionId),
+    refetchInterval: 30_000,
+  });
   const { data: matches = [] } = useQuery({
     queryKey: ["display-mat-matches", competitionId],
     queryFn: () => fetchMatches(competitionId),
-    refetchInterval: 700,
+    refetchInterval: 15_000,
   });
   const { data: divisions = [] } = useQuery({
     queryKey: ["display-divs", competitionId],
@@ -30,6 +45,14 @@ function MatDisplayPage() {
     const id = window.setInterval(() => setTick((t) => t + 1), 200);
     return () => window.clearInterval(id);
   }, []);
+
+  if (competition?.paused_mats?.includes(mat)) {
+    return (
+      <div className="min-h-dvh grid place-items-center bg-[#1a1a1a] text-white/50 text-2xl">
+        Tatâmi {mat} — pausado
+      </div>
+    );
+  }
 
   const match = pickMatDisplayMatch(matches, mat);
   if (!match) {

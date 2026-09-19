@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { fetchCompetition, fetchMatches } from "@/lib/competition/api";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
+import { useCompetitionRealtime } from "@/hooks/useCompetitionRealtime";
 
 export const Route = createFileRoute("/mesa/$competitionId/")({
   head: () => ({ meta: [{ title: "Mesas — MatComp" }] }),
@@ -18,14 +19,21 @@ function matNumbers(matsCount: number, matchMats: number[]) {
 
 function MesaHubPage() {
   const { competitionId } = Route.useParams();
+
+  useCompetitionRealtime(competitionId, [
+    ["mesa-matches", competitionId],
+    ["mesa-comp", competitionId],
+  ]);
+
   const { data: competition } = useQuery({
     queryKey: ["mesa-comp", competitionId],
     queryFn: () => fetchCompetition(competitionId),
+    refetchInterval: 30_000,
   });
   const { data: matches = [] } = useQuery({
     queryKey: ["mesa-matches", competitionId],
     queryFn: () => fetchMatches(competitionId),
-    refetchInterval: 4000,
+    refetchInterval: 15_000,
   });
 
   const mats = useMemo(

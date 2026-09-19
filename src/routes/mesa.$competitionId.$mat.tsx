@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { Logo } from "@/components/Logo";
 import { WIN_METHOD_LABEL, type WinMethod } from "@/lib/competition/types";
 import { getMesaToken, mesaTokenFromSearch, setMesaToken } from "@/lib/mesa-token";
+import { useCompetitionRealtime } from "@/hooks/useCompetitionRealtime";
 
 export const Route = createFileRoute("/mesa/$competitionId/$mat")({
   head: ({ params }) => ({
@@ -32,9 +33,19 @@ function MesaMatPage() {
     if (t) setMesaToken(t);
   }, [search.token]);
 
+  useCompetitionRealtime(
+    competitionId,
+    [
+      ["mesa-matches", competitionId],
+      ["mesa-comp", competitionId],
+    ],
+    { includeCompetition: true },
+  );
+
   const { data: competition } = useQuery({
     queryKey: ["mesa-comp", competitionId],
     queryFn: () => fetchCompetition(competitionId),
+    refetchInterval: 30_000,
   });
   const { data: divisions = [] } = useQuery({
     queryKey: ["mesa-divs", competitionId],
@@ -43,8 +54,10 @@ function MesaMatPage() {
   const { data: matches = [] } = useQuery({
     queryKey: ["mesa-matches", competitionId],
     queryFn: () => fetchMatches(competitionId),
-    refetchInterval: 2000,
+    refetchInterval: 15_000,
   });
+
+  const paused = competition?.paused_mats?.includes(mat) ?? false;
 
   const onMat = useMemo(
     () =>
@@ -104,10 +117,12 @@ function MesaMatPage() {
             <p className="text-[10px] uppercase tracking-[0.25em] text-primary">Esta mesa</p>
             <h1 className="font-display text-3xl font-bold">Tatâmi {mat}</h1>
             <p className="text-sm text-white/50 mt-1">
-              Só lutas deste tatâmi. Outras mesas não interferem.
+              {paused
+                ? "Tatâmi pausado pelo organizador."
+                : "Só lutas deste tatâmi. Outras mesas não interferem."}
             </p>
           </div>
-          {current && (
+          {current && !paused && (
             <div className="flex flex-wrap gap-2">
               <Button asChild className="bg-primary hover:bg-primary/90">
                 <Link to="/scoreboard/$matchId" params={{ matchId: current.id }}>
