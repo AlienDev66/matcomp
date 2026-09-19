@@ -6,12 +6,14 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  redirect,
 } from "@tanstack/react-router";
 import { type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { AuthProvider } from "../hooks/useAuth";
 import { Toaster } from "sonner";
+import { federationSlugFromHost } from "@/lib/competition/federations";
 
 function NotFoundComponent() {
   return (
@@ -70,6 +72,14 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  beforeLoad: () => {
+    if (typeof window === "undefined") return;
+    const slug = federationSlugFromHost(window.location.hostname);
+    const path = window.location.pathname;
+    if (slug && (path === "/" || path === "")) {
+      throw redirect({ to: "/f/$federationSlug", params: { federationSlug: slug } });
+    }
+  },
   head: () => ({
     meta: [
       { charSet: "utf-8" },
