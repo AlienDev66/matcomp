@@ -7,11 +7,17 @@ import {
   isFederationAdmin,
   setFederationApproval,
 } from "@/lib/competition/api";
+import {
+  connectOrganizerByCode,
+  fetchFederationOrganizers,
+} from "@/lib/competition/organizers";
 import { EventDiscovery } from "@/components/EventDiscovery";
 import { Logo } from "@/components/Logo";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { useState } from "react";
 
 export const Route = createFileRoute("/f/$federationSlug")({
   head: ({ params }) => ({
@@ -24,6 +30,8 @@ function FederationLayout() {
   const { federationSlug } = Route.useParams();
   const { session, user } = useAuth();
   const qc = useQueryClient();
+  const [orgCode, setOrgCode] = useState("");
+  const [busyCode, setBusyCode] = useState(false);
   const { data: federation, isLoading } = useQuery({
     queryKey: ["federation", federationSlug],
     queryFn: () => fetchFederationBySlug(federationSlug),
@@ -36,6 +44,11 @@ function FederationLayout() {
   const { data: pending = [] } = useQuery({
     queryKey: ["fed-pending", federation?.id],
     queryFn: () => fetchPendingFederationEvents(federation!.id),
+    enabled: !!federation && !!isAdmin,
+  });
+  const { data: linkedOrgs = [] } = useQuery({
+    queryKey: ["fed-orgs", federation?.id],
+    queryFn: () => fetchFederationOrganizers(federation!.id),
     enabled: !!federation && !!isAdmin,
   });
 
@@ -136,6 +149,52 @@ function FederationLayout() {
           </div>
         )}
 
+        {isAdmin && (
+          <section className="border border-white/10 p-5 space-y-3">
+            <h2 className="font-display text-lg font-semibold">Organizações ligadas</h2>
+            <p className="text-sm text-white/50">
+              Cola o <strong className="text-white/70">código da organização</strong> (página
+              Organizador) para a ligar a esta federação.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Input
+                value={orgCode}
+                onChange={(e) => setOrgCode(e.target.value)}
+                placeholder="código…"
+                className="max-w-xs font-mono"
+              />
+              <Button
+                type="button"
+                disabled={busyCode || !orgCode.trim()}
+                className="bg-primary hover:bg-primary/90"
+                onClick={async () => {
+                  setBusyCode(true);
+                  try {
+                    await connectOrganizerByCode(federation.id, orgCode);
+                    toast.success("Organização ligada");
+                    setOrgCode("");
+                    await qc.invalidateQueries({ queryKey: ["fed-orgs", federation.id] });
+                  } catch (err: any) {
+                    toast.error(err.message);
+                  } finally {
+                    setBusyCode(false);
+                  }
+                }}
+              >
+                Ligar
+              </Button>
+            </div>
+            <ul className="text-sm text-white/60 space-y-1">
+              {linkedOrgs.map((row) => (
+                <li key={row.id}>• {row.organizer?.name ?? row.organizer_id}</li>
+              ))}
+              {linkedOrgs.length === 0 && (
+                <li className="text-white/35">Nenhuma organização ligada ainda.</li>
+              )}
+            </ul>
+          </section>
+        )}
+
         {isAdmin && pending.length > 0 && (
           <section className="border border-primary/30 bg-primary/5 p-5 space-y-3">
             <h2 className="font-display text-lg font-semibold">Pedidos de aprovação</h2>
@@ -184,6 +243,7 @@ function FederationLayout() {
           federationId={federation.id}
           federation={federation}
           showCreateActions={!!session}
+          publicMode={!session}
           title={federation.name}
           subtitle={`Circuito · ${federation.subdomain ?? federation.slug}.matcomp.com`}
         />
