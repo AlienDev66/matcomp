@@ -19,6 +19,11 @@ export function AppChrome({
   const nav = [
     { to: "/home", label: "Início", match: (p: string) => p === "/home" },
     { to: "/events", label: "Eventos", match: (p: string) => p.startsWith("/events") },
+    {
+      to: "/organizer",
+      label: "Organizador",
+      match: (p: string) => p.startsWith("/organizer"),
+    },
     { to: "/rankings", label: "Ranking", match: (p: string) => p.startsWith("/rankings") },
     {
       to: "/membership",

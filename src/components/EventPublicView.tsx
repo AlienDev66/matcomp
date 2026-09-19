@@ -142,6 +142,16 @@ export function EventPublicView({ competitionId, lang: langProp = "pt" }: EventP
     queryFn: () => fetchAcademyById(competition!.academy_id!),
     enabled: !!competition?.academy_id,
   });
+  const { data: hostOrganizer } = useQuery({
+    queryKey: ["public-organizer", competition?.organizer_id],
+    queryFn: async () => {
+      const { fetchOrganizer } = await import("@/lib/competition/organizers");
+      return fetchOrganizer(competition!.organizer_id!);
+    },
+    enabled: !!competition?.organizer_id,
+  });
+  const organizerLabel =
+    hostOrganizer?.name ?? hostAcademy?.name ?? "Organizador independente";
   const { data: divisions = [] } = useQuery({
     queryKey: ["public-divisions", competitionId],
     queryFn: () => fetchDivisions(competitionId),
@@ -329,7 +339,7 @@ export function EventPublicView({ competitionId, lang: langProp = "pt" }: EventP
         </div>
         <div className="relative mx-auto max-w-6xl px-4 py-12 md:py-16">
           <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-primary">
-            {hostAcademy?.name ?? "Evento MatComp"}
+            {organizerLabel}
           </p>
           <h1 className="mt-2 font-display text-3xl md:text-5xl font-bold tracking-tight max-w-3xl">
             {competition?.name ?? "…"}
@@ -460,7 +470,10 @@ export function EventPublicView({ competitionId, lang: langProp = "pt" }: EventP
             <aside className="space-y-8 lg:sticky lg:top-20 self-start text-sm">
               <div className="space-y-2 border-t border-white/10 pt-4">
                 <p className="text-[10px] uppercase tracking-[0.2em] text-white/35">Organizador</p>
-                <p className="font-medium">{hostAcademy?.name ?? "Organizador independente"}</p>
+                <p className="font-medium">{organizerLabel}</p>
+                {hostAcademy && hostOrganizer && (
+                  <p className="text-xs text-white/40">Host: {hostAcademy.name}</p>
+                )}
                 <div className="flex flex-wrap gap-2 pt-1">
                   {competition?.organizer_years != null && (
                     <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400">
