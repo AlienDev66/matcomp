@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  assertBracketLinksResolve,
   planBracket,
   planDoubleElimination,
   planRoundRobin,
@@ -49,6 +50,22 @@ describe("planDoubleElimination", () => {
     expect(plan.some((m) => m.bracketSide === "winners")).toBe(true);
     expect(plan.some((m) => m.bracketSide === "losers")).toBe(true);
     expect(plan.some((m) => m.bracketSide === "grand_final")).toBe(true);
+    assertBracketLinksResolve(plan);
+  });
+
+  test("8 athletes: all links resolve", () => {
+    const ids = ["a", "b", "c", "d", "e", "f", "g", "h"];
+    const plan = planDoubleElimination(ids);
+    assertBracketLinksResolve(plan);
+    expect(plan.filter((m) => m.bracketSide === "winners")).toHaveLength(7);
+    expect(plan.filter((m) => m.bracketSide === "losers")).toHaveLength(6);
+    expect(plan.filter((m) => m.bracketSide === "grand_final")).toHaveLength(1);
+  });
+
+  test("2 athletes: single grand final", () => {
+    const plan = planDoubleElimination(["a", "b"]);
+    expect(plan).toHaveLength(1);
+    expect(plan[0]!.bracketSide).toBe("grand_final");
   });
 });
 

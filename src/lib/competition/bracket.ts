@@ -168,8 +168,10 @@ export function planRoundRobin(athleteIds: string[]): PlannedMatch[] {
 }
 
 /**
- * Double-elimination MVP (power-of-2):
- * winners bracket + losers bracket + single grand final.
+ * Double-elimination (power-of-2), IBJJF-style wiring:
+ * winners bracket + full losers bracket (drop-in + consolidation) + grand final.
+ * Note: no “reset” / second GF if the losers-bracket winner takes the first GF —
+ * that remains a future polish for full IBJJF reset finals.
  */
 export function planDoubleElimination(athleteIds: string[]): PlannedMatch[] {
   if (athleteIds.length < 2) {
@@ -178,111 +180,83 @@ export function planDoubleElimination(athleteIds: string[]): PlannedMatch[] {
 
   const seeds = seedAthletes(athleteIds);
   const size = seeds.length;
+
+  // 2 athletes: single decisive match (no meaningful losers bracket)
+  if (size === 2) {
+    return [
+      withByeFlag({
+        key: "gf:0:0",
+        roundIndex: 0,
+        matchIndex: 0,
+        athleteAId: seeds[0] ?? null,
+        athleteBId: seeds[1] ?? null,
+        nextMatchKey: null,
+        nextSlot: null,
+        bracketSide: "grand_final",
+      }),
+    ];
+  }
+
   const wRounds = Math.log2(size);
   const planned: PlannedMatch[] = [];
 
   // ── Winners ──────────────────────────────────────────────────────────────
-  const w0 = size / 2;
-  for (let i = 0; i < w0; i++) {
-    const a = seeds[i * 2] ?? null;
-    const b = seeds[i * 2 + 1] ?? null;
-    planned.push(
-      withByeFlag({
-        key: `w:0:${i}`,
-        roundIndex: 0,
-        matchIndex: i,
-        athleteAId: a,
-        athleteBId: b,
-        nextMatchKey: wRounds > 1 ? `w:1:${Math.floor(i / 2)}` : `gf:0:0`,
-        nextSlot: wRounds > 1 ? (i % 2 === 0 ? "a" : "b") : "a",
-        bracketSide: "winners",
-        // Losers of W0 go to L0
-        loserNextMatchKey: `l:0:${Math.floor(i / 2)}`,
-        loserNextSlot: i % 2 === 0 ? "a" : "b",
-      }),
-    );
-  }
-
-  let wCount = w0 / 2;
-  for (let r = 1; r < wRounds; r++) {
-    for (let i = 0; i < wCount; i++) {
-      const isLast = r === wRounds - 1;
-      planned.push({
-        key: `w:${r}:${i}`,
-        roundIndex: r,
-        matchIndex: i,
-        athleteAId: null,
-        athleteBId: null,
-        nextMatchKey: isLast ? `gf:0:0` : `w:${r + 1}:${Math.floor(i / 2)}`,
-        nextSlot: isLast ? "a" : i % 2 === 0 ? "a" : "b",
-        bracketSide: "winners",
-        isBye: false,
-        // Drop losers into losers bracket at round r*2-1 style slot
-        loserNextMatchKey: isLast ? `l:${wRounds}:${0}` : `l:${r * 2 - 1}:${i}`,
-        loserNextSlot: isLast ? "b" : "b",
-      });
-    }
-    wCount /= 2;
-  }
-
-  // ── Losers (simplified: L0 pairs W0 losers; then cascade) ───────────────
-  // L0: size/4 matches
-  const l0 = Math.max(1, size / 4);
-  for (let i = 0; i < l0; i++) {
-    const hasNext = wRounds > 1;
-    planned.push({
-      key: `l:0:${i}`,
-      roundIndex: 100,
-      matchIndex: i,
-      athleteAId: null,
-      athleteBId: null,
-      nextMatchKey: hasNext ? `l:1:${i}` : `gf:0:0`,
-      nextSlot: hasNext ? "a" : "b",
-      bracketSide: "losers",
-      isBye: false,
-    });
-  }
-
-  // Intermediate losers rounds: receive W losers + previous L winners
-  for (let r = 1; r < wRounds; r++) {
-    const count = Math.max(1, size / Math.pow(2, r + 2));
+  for (let r = 0; r < wRounds; r++) {
+    const count = size / Math.pow(2, r + 1);
     for (let i = 0; i < count; i++) {
-      const isLastL = r === wRounds - 1;
+      const isLast = r === wRounds - 1;
+      const loserLbRound = r === 0 ? 0 : 2 * r - 1;
+      planned.push(
+        withByeFlag({
+          key: `w:${r}:${i}`,
+          roundIndex: r,
+          matchIndex: i,
+          athleteAId: r === 0 ? (seeds[i * 2] ?? null) : null,
+          athleteBId: r === 0 ? (seeds[i * 2 + 1] ?? null) : null,
+          nextMatchKey: isLast ? "gf:0:0" : `w:${r + 1}:${Math.floor(i / 2)}`,
+          nextSlot: isLast ? "a" : i % 2 === 0 ? "a" : "b",
+          bracketSide: "winners",
+          loserNextMatchKey: `l:${loserLbRound}:${r === 0 ? Math.floor(i / 2) : i}`,
+          loserNextSlot: r === 0 ? (i % 2 === 0 ? "a" : "b") : "b",
+        }),
+      );
+    }
+  }
+
+  // ── Losers: 2*(wRounds-1) rounds (drop-in on odd indices after L0) ────────
+  const lbRounds = 2 * (wRounds - 1);
+  for (let lr = 0; lr < lbRounds; lr++) {
+    const count = Math.max(1, size / Math.pow(2, Math.floor(lr / 2) + 2));
+    for (let i = 0; i < count; i++) {
+      const isLast = lr === lbRounds - 1;
+      const nextMatchKey = isLast
+        ? "gf:0:0"
+        : lr % 2 === 0
+          ? `l:${lr + 1}:${i}`
+          : `l:${lr + 1}:${Math.floor(i / 2)}`;
+      const nextSlot: "a" | "b" = isLast
+        ? "b"
+        : lr % 2 === 0
+          ? "a"
+          : i % 2 === 0
+            ? "a"
+            : "b";
       planned.push({
-        key: `l:${r}:${i}`,
-        roundIndex: 100 + r,
+        key: `l:${lr}:${i}`,
+        roundIndex: 100 + lr,
         matchIndex: i,
         athleteAId: null,
         athleteBId: null,
-        nextMatchKey: isLastL ? `gf:0:0` : `l:${r + 1}:${Math.floor(i / 2)}`,
-        nextSlot: isLastL ? "b" : i % 2 === 0 ? "a" : "b",
+        nextMatchKey,
+        nextSlot,
         bracketSide: "losers",
         isBye: false,
       });
     }
   }
 
-  // Ensure final losers feed key exists for WB final loser
-  const lastLKey = `l:${wRounds}:0`;
-  if (!planned.some((p) => p.key === lastLKey)) {
-    planned.push({
-      key: lastLKey,
-      roundIndex: 100 + wRounds,
-      matchIndex: 0,
-      athleteAId: null,
-      athleteBId: null,
-      nextMatchKey: `gf:0:0`,
-      nextSlot: "b",
-      bracketSide: "losers",
-      isBye: false,
-    });
-  }
-
-  // Wire WB final loser → lastLKey slot b already set above on last W match
-
-  // ── Grand final ──────────────────────────────────────────────────────────
   planned.push({
-    key: `gf:0:0`,
+    key: "gf:0:0",
     roundIndex: 200,
     matchIndex: 0,
     athleteAId: null,
@@ -294,6 +268,19 @@ export function planDoubleElimination(athleteIds: string[]): PlannedMatch[] {
   });
 
   return planned;
+}
+
+/** Every next/loser pointer must resolve to an existing key (or null). */
+export function assertBracketLinksResolve(planned: PlannedMatch[]): void {
+  const keys = new Set(planned.map((p) => p.key));
+  for (const p of planned) {
+    if (p.nextMatchKey && !keys.has(p.nextMatchKey)) {
+      throw new Error(`Broken next link ${p.key} → ${p.nextMatchKey}`);
+    }
+    if (p.loserNextMatchKey && !keys.has(p.loserNextMatchKey)) {
+      throw new Error(`Broken loser link ${p.key} → ${p.loserNextMatchKey}`);
+    }
+  }
 }
 
 export function planBracket(format: BracketFormat, athleteIds: string[]): PlannedMatch[] {
