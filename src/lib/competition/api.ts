@@ -34,6 +34,92 @@ export async function fetchAllAcademies() {
   return (data ?? []) as Academy[];
 }
 
+export type AcademyCommunityStats = {
+  academy: Academy;
+  athleteCount: number;
+  wins: number;
+  losses: number;
+  gold: number;
+  winDiff: number;
+};
+
+/** Public academy directory + leaderboard aggregates (last season / all-time rows). */
+export async function fetchAcademyCommunityStats(): Promise<AcademyCommunityStats[]> {
+  const academies = await fetchAllAcademies();
+  if (academies.length === 0) return [];
+
+  const { data: athletes, error: aErr } = await supabase
+    .from("athletes")
+    .select("id, academy_id")
+    .eq("active", true);
+  if (aErr) throw aErr;
+
+  const countByAcademy = new Map<string, number>();
+  const athleteToAcademy = new Map<string, string>();
+  for (const a of athletes ?? []) {
+    countByAcademy.set(a.academy_id, (countByAcademy.get(a.academy_id) ?? 0) + 1);
+    athleteToAcademy.set(a.id, a.academy_id);
+  }
+
+  const statsByAcademy = new Map<
+    string,
+    { wins: number; losses: number; gold: number }
+  >();
+
+  const { data: seasons } = await supabase
+    .from("ranking_seasons")
+    .select("id")
+    .order("created_at", { ascending: false })
+    .limit(1);
+  const seasonId = seasons?.[0]?.id;
+  if (seasonId) {
+    const { data: rows } = await supabase
+      .from("ranking_rows")
+      .select("athlete_id, wins, losses, gold")
+      .eq("season_id", seasonId);
+    for (const row of rows ?? []) {
+      const academyId = athleteToAcademy.get(row.athlete_id);
+      if (!academyId) continue;
+      const cur = statsByAcademy.get(academyId) ?? { wins: 0, losses: 0, gold: 0 };
+      statsByAcademy.set(academyId, {
+        wins: cur.wins + (row.wins ?? 0),
+        losses: cur.losses + (row.losses ?? 0),
+        gold: cur.gold + (row.gold ?? 0),
+      });
+    }
+  }
+
+  return academies.map((academy) => {
+    const s = statsByAcademy.get(academy.id) ?? { wins: 0, losses: 0, gold: 0 };
+    return {
+      academy,
+      athleteCount: countByAcademy.get(academy.id) ?? 0,
+      wins: s.wins,
+      losses: s.losses,
+      gold: s.gold,
+      winDiff: s.wins - s.losses,
+    };
+  });
+}
+
+export type AcademyPublicStaff = {
+  user_id: string;
+  role: string;
+  full_name: string;
+};
+
+export async function fetchAcademyPublicStaff(academyId: string) {
+  const { data, error } = await supabase.rpc("get_academy_public_staff", {
+    _academy_id: academyId,
+  });
+  if (error) {
+    // Migration not applied yet — fail soft
+    console.warn(error.message);
+    return [] as AcademyPublicStaff[];
+  }
+  return (data ?? []) as AcademyPublicStaff[];
+}
+
 export async function fetchAcademyBySlug(slug: string) {
   const { data, error } = await supabase.from("academies").select("*").eq("slug", slug).maybeSingle();
   if (error) throw error;
@@ -224,6 +310,8 @@ export async function fetchEvents(filters?: {
   search?: string;
   country?: string;
   federationId?: string | null;
+  /** Hide drafts on public marketplace */
+  excludeDrafts?: boolean;
 }) {
   const scope = filters?.scope ?? "all";
   const {
@@ -234,7 +322,16 @@ export async function fetchEvents(filters?: {
 
   if (scope === "mine") {
     if (!user) return [] as Competition[];
-    q = q.eq("created_by", user.id);
+    const { data: memberships } = await supabase
+      .from("organizer_members")
+      .select("organizer_id")
+      .eq("user_id", user.id);
+    const orgIds = (memberships ?? []).map((m) => m.organizer_id);
+    if (orgIds.length === 0) {
+      q = q.eq("created_by", user.id);
+    } else {
+      q = q.or(`created_by.eq.${user.id},organizer_id.in.(${orgIds.join(",")})`);
+    }
   }
 
   if (filters?.federationId) {
@@ -246,6 +343,12 @@ export async function fetchEvents(filters?: {
 
   const now = Date.now();
   let rows = (data ?? []) as Competition[];
+
+  if (filters?.excludeDrafts || scope === "upcoming" || scope === "past" || scope === "all") {
+    if (scope !== "mine") {
+      rows = rows.filter((e) => e.status !== "draft");
+    }
+  }
 
   if (scope === "upcoming") {
     rows = rows.filter((e) => {
@@ -272,22 +375,29 @@ export async function fetchEvents(filters?: {
     );
   }
 
+  const country = filters?.country?.trim().toLowerCase();
+  if (country) {
+    rows = rows.filter(
+      (e) =>
+        (e.venue ?? "").toLowerCase().includes(country) ||
+        (e.map_query ?? "").toLowerCase().includes(country),
+    );
+  }
+
   return rows;
 }
 
 export async function fetchMyEvents() {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return [] as Competition[];
+  return fetchEvents({ scope: "mine" });
+}
 
-  const { data, error } = await supabase
-    .from("competitions")
-    .select("*")
-    .eq("created_by", user.id)
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data ?? []) as Competition[];
+/** True if current user can manage this competition (RLS helper mirror). */
+export async function canManageCompetition(competitionId: string) {
+  const { data, error } = await supabase.rpc("can_manage_competition", {
+    _competition_id: competitionId,
+  });
+  if (error) return false;
+  return !!data;
 }
 
 export async function createCompetition(
@@ -295,9 +405,13 @@ export async function createCompetition(
   input: {
     name: string;
     venue?: string;
+    map_query?: string | null;
     starts_at?: string | null;
+    ends_at?: string | null;
     status?: CompetitionStatus;
     federation_id?: string | null;
+    organizer_id?: string | null;
+    mats_count?: number;
   },
 ) {
   const {
@@ -305,18 +419,34 @@ export async function createCompetition(
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Precisas de sessão.");
 
+  if (!input.organizer_id) {
+    throw new Error("Escolhe uma organização (Organizer) para criar o evento.");
+  }
+
+  const { data: canManage } = await supabase.rpc("can_manage_organizer", {
+    _organizer_id: input.organizer_id,
+  });
+  if (!canManage) {
+    throw new Error("Não tens permissão nesta organização.");
+  }
+
   const slug = slugify(input.name) || `comp-${Date.now().toString(36)}`;
   const { data, error } = await supabase
     .from("competitions")
     .insert({
       academy_id: academyId,
+      organizer_id: input.organizer_id,
       created_by: user.id,
       federation_id: input.federation_id ?? null,
       name: input.name.trim(),
       slug,
       venue: input.venue?.trim() || null,
+      map_query: input.map_query?.trim() || null,
       starts_at: input.starts_at || null,
+      ends_at: input.ends_at || null,
+      mats_count: input.mats_count ?? 1,
       status: input.status ?? "draft",
+      federation_approval: input.federation_id ? "pending" : "none",
     } as never)
     .select("*")
     .single();
@@ -327,18 +457,136 @@ export async function createCompetition(
 export async function createEvent(input: {
   name: string;
   venue?: string;
+  map_query?: string | null;
   starts_at?: string | null;
+  ends_at?: string | null;
   academy_id?: string | null;
   federation_id?: string | null;
+  organizer_id: string;
   status?: CompetitionStatus;
+  mats_count?: number;
+  /** Copy divisions structure from another event of the same org */
+  duplicate_from_id?: string | null;
+  /** Apply a built-in template after create */
+  template?: "blank" | "inhouse" | "adult_gi" | null;
 }) {
-  return createCompetition(input.academy_id ?? null, {
+  const event = await createCompetition(input.academy_id ?? null, {
     name: input.name,
     venue: input.venue,
+    map_query: input.map_query,
     starts_at: input.starts_at,
+    ends_at: input.ends_at,
     status: input.status,
     federation_id: input.federation_id,
+    organizer_id: input.organizer_id,
+    mats_count: input.mats_count,
   });
+
+  if (input.duplicate_from_id) {
+    await duplicateEventDivisions(input.duplicate_from_id, event.id);
+  } else if (input.template === "inhouse") {
+    await createDivision(event.id, {
+      name: "Open / Absolute",
+      kind: "entry",
+      gender: "open",
+      age_label: "Adult",
+      price_cents: 2500,
+    });
+    await createDivision(event.id, {
+      name: "Iniciante",
+      kind: "entry",
+      gender: "open",
+      belt: "white",
+      age_label: "Adult",
+      price_cents: 2000,
+    });
+  } else if (input.template === "adult_gi") {
+    await createDivisionTemplate(event.id, {
+      preset: "adult_gi",
+      gender: "male",
+      price_cents: 4500,
+    });
+    await createDivisionTemplate(event.id, {
+      preset: "adult_gi",
+      gender: "female",
+      price_cents: 4500,
+    });
+  }
+
+  return event;
+}
+
+/** Copy division tree from source competition into target (groups + entries). */
+export async function duplicateEventDivisions(sourceId: string, targetId: string) {
+  const source = await fetchDivisions(sourceId);
+  if (source.length === 0) return;
+
+  const groups = source.filter((d) => d.kind === "group" || !d.parent_id);
+  const entries = source.filter((d) => d.kind === "entry" && d.parent_id);
+  const idMap = new Map<string, string>();
+
+  const roots = groups.length
+    ? groups.filter((g) => !g.parent_id || !source.some((s) => s.id === g.parent_id))
+    : source.filter((d) => !d.parent_id);
+
+  for (const g of roots) {
+    const created = await createDivision(targetId, {
+      name: g.name,
+      kind: (g.kind as "group" | "entry") ?? "entry",
+      gender: (g.gender as "male" | "female" | "open" | null) ?? null,
+      belt: g.belt,
+      age_label: g.age_label,
+      age_min: g.age_min,
+      age_max: g.age_max,
+      weight_label: g.weight_label,
+      weight_min_kg: g.weight_min_kg,
+      weight_max_kg: g.weight_max_kg,
+      price_cents: g.price_cents ?? 0,
+      currency: g.currency ?? "EUR",
+      sort_order: g.sort_order ?? 0,
+    });
+    idMap.set(g.id, created.id);
+  }
+
+  for (const e of entries) {
+    await createDivision(targetId, {
+      name: e.name,
+      kind: "entry",
+      parent_id: e.parent_id ? idMap.get(e.parent_id) ?? null : null,
+      gender: (e.gender as "male" | "female" | "open" | null) ?? null,
+      belt: e.belt,
+      age_label: e.age_label,
+      age_min: e.age_min,
+      age_max: e.age_max,
+      weight_label: e.weight_label,
+      weight_min_kg: e.weight_min_kg,
+      weight_max_kg: e.weight_max_kg,
+      price_cents: e.price_cents ?? 0,
+      currency: e.currency ?? "EUR",
+      sort_order: e.sort_order ?? 0,
+    });
+  }
+
+  // Flat entries without parent that weren't treated as roots
+  for (const d of source) {
+    if (idMap.has(d.id) || d.parent_id) continue;
+    if (roots.some((r) => r.id === d.id)) continue;
+    await createDivision(targetId, {
+      name: d.name,
+      kind: (d.kind as "group" | "entry") ?? "entry",
+      gender: (d.gender as "male" | "female" | "open" | null) ?? null,
+      belt: d.belt,
+      age_label: d.age_label,
+      age_min: d.age_min,
+      age_max: d.age_max,
+      weight_label: d.weight_label,
+      weight_min_kg: d.weight_min_kg,
+      weight_max_kg: d.weight_max_kg,
+      price_cents: d.price_cents ?? 0,
+      currency: d.currency ?? "EUR",
+      sort_order: d.sort_order ?? 0,
+    });
+  }
 }
 
 export async function updateCompetitionStatus(competitionId: string, status: CompetitionStatus) {

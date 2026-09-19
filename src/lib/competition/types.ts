@@ -81,6 +81,7 @@ export type Competition = {
   mats_count?: number;
   federation_approval?: "none" | "pending" | "approved" | "rejected";
   paused_mats?: number[];
+  organizer_id?: string | null;
 };
 
 export type BracketFormat =
