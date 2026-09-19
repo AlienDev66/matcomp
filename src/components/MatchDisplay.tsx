@@ -1,5 +1,6 @@
 import { WIN_METHOD_LABEL, type CompetitionMatch, type WinMethod } from "@/lib/competition/types";
 import { cn } from "@/lib/utils";
+import { useEffect, useRef, useState } from "react";
 
 export function effectiveClock(match: {
   clock_seconds?: number;
@@ -57,6 +58,17 @@ export function MatchDisplayView({
       ? WIN_METHOD_LABEL[match.win_method as WinMethod]
       : null;
 
+  const [sidesFlash, setSidesFlash] = useState(false);
+  const prevSwap = useRef(match.sides_swapped);
+  useEffect(() => {
+    if (prevSwap.current !== match.sides_swapped) {
+      prevSwap.current = match.sides_swapped;
+      setSidesFlash(true);
+      const t = window.setTimeout(() => setSidesFlash(false), 1600);
+      return () => window.clearTimeout(t);
+    }
+  }, [match.sides_swapped]);
+
   if (finished && match.winner_id) {
     const winner = winnerA ? match.athlete_a : winnerB ? match.athlete_b : null;
     return (
@@ -86,7 +98,12 @@ export function MatchDisplayView({
   const { top, bottom } = displaySides(match);
 
   return (
-    <div className="min-h-dvh bg-[#1a1a1a] text-white flex flex-col">
+    <div className="min-h-dvh bg-[#1a1a1a] text-white flex flex-col relative">
+      {sidesFlash && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 bg-primary text-primary-foreground px-4 py-2 text-sm font-semibold uppercase tracking-wider shadow-lg">
+          Lados sincronizados
+        </div>
+      )}
       <DisplayAthleteRow
         name={top.name}
         academy={top.academy}
