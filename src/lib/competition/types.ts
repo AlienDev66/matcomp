@@ -79,7 +79,16 @@ export type Competition = {
   organizer_years?: number | null;
   organizer_events_count?: number | null;
   mats_count?: number;
+  federation_approval?: "none" | "pending" | "approved" | "rejected";
 };
+
+export type BracketFormat =
+  | "single_elim"
+  | "double_elim"
+  | "round_robin"
+  | "single_elim_consolation";
+
+export type BracketSide = "winners" | "losers" | "consolation" | "rr" | "grand_final";
 
 export type CompetitionDivision = {
   id: string;
@@ -99,6 +108,7 @@ export type CompetitionDivision = {
   age_min?: number | null;
   age_max?: number | null;
   weight_label?: string | null;
+  bracket_format?: BracketFormat;
 };
 
 export type UserProfile = {
@@ -221,8 +231,25 @@ export type CompetitionMatch = {
   clock_running?: boolean;
   clock_updated_at?: string | null;
   sides_swapped?: boolean;
+  bracket_side?: BracketSide | null;
+  is_bye?: boolean;
+  loser_next_match_id?: string | null;
+  loser_next_slot?: "a" | "b" | null;
   athlete_a?: Athlete | null;
   athlete_b?: Athlete | null;
+};
+
+export type EventStaffRole = "mesa" | "referee" | "admin";
+
+export type EventStaff = {
+  id: string;
+  competition_id: string;
+  user_id: string | null;
+  role: EventStaffRole;
+  mat_number: number | null;
+  token: string;
+  label: string | null;
+  active: boolean;
 };
 
 export function slugify(input: string): string {

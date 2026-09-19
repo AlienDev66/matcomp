@@ -17,6 +17,101 @@ export const IBJJF_ADULT_WEIGHTS: { label: string; maxKg: number | null }[] = [
 
 export const BJJ_BELTS = ["white", "blue", "purple", "brown", "black"] as const;
 
+export const IBJJF_KIDS_WEIGHTS: { label: string; maxKg: number | null }[] = [
+  { label: "Gallinho", maxKg: 25 },
+  { label: "Leve", maxKg: 30 },
+  { label: "Médio", maxKg: 35 },
+  { label: "Meio-pesado", maxKg: 40 },
+  { label: "Pesado", maxKg: 45 },
+  { label: "Super-pesado", maxKg: null },
+];
+
+export type DivisionTemplatePreset =
+  | "adult_gi"
+  | "adult_nogi"
+  | "master1_gi"
+  | "master2_gi"
+  | "master3_gi"
+  | "juvenile_gi"
+  | "kids_gi";
+
+export const DIVISION_TEMPLATE_META: Record<
+  DivisionTemplatePreset,
+  {
+    label: string;
+    age_label: string;
+    age_min: number;
+    age_max: number | null;
+    gi: boolean;
+    weights: { label: string; maxKg: number | null }[];
+    belts: readonly string[];
+  }
+> = {
+  adult_gi: {
+    label: "Adult Gi",
+    age_label: "Adult",
+    age_min: 18,
+    age_max: 29,
+    gi: true,
+    weights: IBJJF_ADULT_WEIGHTS,
+    belts: BJJ_BELTS,
+  },
+  adult_nogi: {
+    label: "Adult No-Gi",
+    age_label: "Adult",
+    age_min: 18,
+    age_max: 29,
+    gi: false,
+    weights: IBJJF_ADULT_WEIGHTS,
+    belts: BJJ_BELTS,
+  },
+  master1_gi: {
+    label: "Master 1 Gi",
+    age_label: "Master 1",
+    age_min: 30,
+    age_max: 40,
+    gi: true,
+    weights: IBJJF_ADULT_WEIGHTS,
+    belts: ["blue", "purple", "brown", "black"],
+  },
+  master2_gi: {
+    label: "Master 2 Gi",
+    age_label: "Master 2",
+    age_min: 41,
+    age_max: 50,
+    gi: true,
+    weights: IBJJF_ADULT_WEIGHTS,
+    belts: ["blue", "purple", "brown", "black"],
+  },
+  master3_gi: {
+    label: "Master 3 Gi",
+    age_label: "Master 3",
+    age_min: 51,
+    age_max: null,
+    gi: true,
+    weights: IBJJF_ADULT_WEIGHTS,
+    belts: ["purple", "brown", "black"],
+  },
+  juvenile_gi: {
+    label: "Juvenile Gi",
+    age_label: "Juvenile",
+    age_min: 16,
+    age_max: 17,
+    gi: true,
+    weights: IBJJF_ADULT_WEIGHTS,
+    belts: ["white", "blue", "purple"],
+  },
+  kids_gi: {
+    label: "Kids Gi",
+    age_label: "Kids",
+    age_min: 8,
+    age_max: 15,
+    gi: true,
+    weights: IBJJF_KIDS_WEIGHTS,
+    belts: ["white", "grey", "yellow", "orange", "green"],
+  },
+};
+
 export function athleteAgeYears(birthDate: string | null | undefined, on = new Date()): number | null {
   if (!birthDate) return null;
   const d = new Date(birthDate);
