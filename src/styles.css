@@ -1,0 +1,392 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Team FS BJJ — Academia Fábio Santos
+ * Dojo aesthetic: deep black, BJJ red, parchment white, gold accents.
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-gold: var(--gold);
+  --font-display: "Syne", "Arial Black", sans-serif;
+  --font-sans: "DM Sans", system-ui, sans-serif;
+}
+
+:root {
+  --radius: 0.5rem;
+  --background: oklch(0.08 0.005 20);
+  --foreground: oklch(0.97 0.01 80);
+  --card: oklch(0.13 0.008 20);
+  --card-foreground: oklch(0.97 0.01 80);
+  --popover: oklch(0.13 0.008 20);
+  --popover-foreground: oklch(0.97 0.01 80);
+  --primary: oklch(0.55 0.22 25);
+  --primary-foreground: oklch(0.98 0.01 80);
+  --secondary: oklch(0.2 0.01 20);
+  --secondary-foreground: oklch(0.97 0.01 80);
+  --muted: oklch(0.18 0.008 20);
+  --muted-foreground: oklch(0.65 0.015 60);
+  --accent: oklch(0.75 0.14 75);
+  --accent-foreground: oklch(0.1 0.01 20);
+  --destructive: oklch(0.55 0.22 25);
+  --destructive-foreground: oklch(0.98 0.01 80);
+  --border: oklch(0.22 0.01 20);
+  --input: oklch(0.18 0.008 20);
+  --ring: oklch(0.55 0.22 25);
+  --success: oklch(0.65 0.16 145);
+  --success-foreground: oklch(0.1 0.01 20);
+  --warning: oklch(0.78 0.14 75);
+  --warning-foreground: oklch(0.12 0.01 20);
+  --gold: oklch(0.78 0.14 75);
+  --chart-1: oklch(0.55 0.22 25);
+  --chart-2: oklch(0.78 0.14 75);
+  --chart-3: oklch(0.65 0.16 145);
+  --chart-4: oklch(0.6 0.18 30);
+  --chart-5: oklch(0.4 0.05 25);
+  --sidebar: oklch(0.1 0.005 20);
+  --sidebar-foreground: oklch(0.97 0.01 80);
+  --sidebar-primary: oklch(0.55 0.22 25);
+  --sidebar-primary-foreground: oklch(0.98 0.01 80);
+  --sidebar-accent: oklch(0.18 0.008 20);
+  --sidebar-accent-foreground: oklch(0.97 0.01 80);
+  --sidebar-border: oklch(0.22 0.01 20);
+  --sidebar-ring: oklch(0.55 0.22 25);
+}
+
+.dark {
+  /* Same as :root — app is dark-first */
+  color-scheme: dark;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    height: 100%;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    background-image:
+      radial-gradient(circle at 0% 0%, oklch(0.18 0.04 25 / 0.4) 0%, transparent 50%),
+      radial-gradient(circle at 100% 100%, oklch(0.15 0.02 25 / 0.3) 0%, transparent 50%);
+    min-height: 100%;
+    min-height: 100dvh;
+    overscroll-behavior-y: none;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: 0.01em;
+  }
+}
+
+@utility text-gradient-fire {
+  background: linear-gradient(135deg, oklch(0.65 0.22 25), oklch(0.78 0.14 75));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* TEAM FS Display — idle screen (lightweight for Android TV) */
+@keyframes display-idle-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes display-idle-logo {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 12px rgba(220, 38, 38, 0.25));
+  }
+  50% {
+    transform: scale(1.04);
+    filter: drop-shadow(0 0 28px rgba(220, 38, 38, 0.55));
+  }
+}
+
+@keyframes display-idle-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes display-idle-line {
+  0%,
+  100% {
+    transform: scaleX(0.35);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+@keyframes display-idle-shimmer {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -120% 0;
+  }
+}
+
+@keyframes display-idle-pulse-text {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+@keyframes display-idle-ring {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.5;
+  }
+  70% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+.display-idle-glow {
+  animation: display-idle-breathe 7s ease-in-out infinite;
+}
+
+.display-idle-logo {
+  animation: display-idle-logo 5s ease-in-out infinite;
+}
+
+.display-idle-rise {
+  animation: display-idle-rise 0.9s ease-out both;
+}
+
+.display-idle-line {
+  animation: display-idle-line 4.5s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.display-idle-title {
+  background-image: linear-gradient(
+    100deg,
+    #fff 0%,
+    #fff 40%,
+    #ff6b6b 50%,
+    #fff 60%,
+    #fff 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: display-idle-shimmer 6s linear infinite;
+}
+
+.display-idle-tag {
+  animation: display-idle-pulse-text 3.2s ease-in-out infinite;
+}
+
+.display-idle-ring {
+  animation: display-idle-ring 4s ease-out infinite;
+}
+
+/* Board / ranking TV slides */
+@keyframes board-slide-enter {
+  from {
+    opacity: 0;
+    transform: translateY(36px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes board-row-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.board-slide-enter {
+  animation: board-slide-enter 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.board-row-enter {
+  animation: board-row-enter 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes schedule-highlight-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 24px 2px rgba(220, 38, 38, 0.2);
+  }
+}
+
+.schedule-highlight {
+  animation: schedule-highlight-pulse 3.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .display-idle-glow,
+  .display-idle-logo,
+  .display-idle-rise,
+  .display-idle-line,
+  .display-idle-title,
+  .display-idle-tag,
+  .display-idle-ring,
+  .board-slide-enter,
+  .board-row-enter,
+  .schedule-highlight {
+    animation: none !important;
+  }
+
+  .display-idle-title {
+    color: #fff;
+    background: none;
+    -webkit-background-clip: unset;
+    background-clip: unset;
+  }
+
+  .ranking-fade-up,
+  .ranking-row {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* Public ranking page */
+.ranking-page {
+  background: #050505;
+  position: relative;
+}
+
+.ranking-page-bg {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(220, 38, 38, 0.28), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 80% 60%, rgba(232, 184, 74, 0.06), transparent 50%),
+    radial-gradient(ellipse 50% 40% at 10% 80%, rgba(220, 38, 38, 0.08), transparent 45%),
+    linear-gradient(180deg, #0a0a0a 0%, #050505 40%, #080606 100%);
+}
+
+.ranking-page-grain {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+@keyframes ranking-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ranking-fade-up {
+  animation: ranking-fade-up 0.85s ease-out both;
+}
+
+.ranking-delay-1 {
+  animation-delay: 0.12s;
+}
+.ranking-delay-2 {
+  animation-delay: 0.24s;
+}
+.ranking-delay-3 {
+  animation-delay: 0.36s;
+}
+
+.ranking-row {
+  animation: ranking-fade-up 0.55s ease-out both;
+}
+
+

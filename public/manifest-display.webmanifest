@@ -1,0 +1,35 @@
+{
+  "id": "/display",
+  "name": "TEAM FS DISPLAY",
+  "short_name": "FS Display",
+  "description": "Cronómetro e ecrã do tatâmi — Team FS BJJ",
+  "start_url": "/display",
+  "scope": "/display",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "background_color": "#070707",
+  "theme_color": "#070707",
+  "orientation": "landscape",
+  "categories": ["sports", "utilities"],
+  "lang": "pt",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
