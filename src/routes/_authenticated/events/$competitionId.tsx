@@ -1159,29 +1159,62 @@ function EventAdminPage() {
               <ul className="space-y-2 text-sm">
                 {eventStaff
                   .filter((s) => s.active)
-                  .map((s) => (
-                    <li
-                      key={s.id}
-                      className="flex flex-wrap items-center justify-between gap-2 border border-white/10 px-3 py-2"
-                    >
-                      <span>
-                        {s.label ?? s.role}
-                        {s.mat_number ? ` · tatâmi ${s.mat_number}` : ""} ·{" "}
-                        <code className="text-xs text-white/40">{s.token.slice(0, 8)}…</code>
-                      </span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        onClick={async () => {
-                          await revokeEventStaff(s.id);
-                          await qc.invalidateQueries({ queryKey: ["event-staff", competitionId] });
-                        }}
+                  .map((s) => {
+                    const staffUrl =
+                      s.role === "mesa" && s.mat_number
+                        ? `${typeof window !== "undefined" ? window.location.origin : ""}/mesa/${competitionId}/${s.mat_number}?token=${s.token}`
+                        : `${typeof window !== "undefined" ? window.location.origin : ""}/mesa/${competitionId}?token=${s.token}`;
+                    return (
+                      <li
+                        key={s.id}
+                        className="space-y-2 border border-white/10 px-3 py-3"
                       >
-                        Revogar
-                      </Button>
-                    </li>
-                  ))}
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-medium">
+                            {s.label ?? s.role}
+                            {s.mat_number ? ` · tatâmi ${s.mat_number}` : ""}
+                          </span>
+                          <div className="flex gap-1">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="border-white/15"
+                              onClick={async () => {
+                                try {
+                                  await navigator.clipboard.writeText(staffUrl);
+                                  toast.success("Link copiado");
+                                } catch {
+                                  toast.message("Seleciona e copia o link abaixo");
+                                }
+                              }}
+                            >
+                              Copiar link
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={async () => {
+                                await revokeEventStaff(s.id);
+                                await qc.invalidateQueries({
+                                  queryKey: ["event-staff", competitionId],
+                                });
+                              }}
+                            >
+                              Revogar
+                            </Button>
+                          </div>
+                        </div>
+                        <input
+                          readOnly
+                          value={staffUrl}
+                          className="w-full bg-black/40 border border-white/10 px-2 py-1.5 text-xs text-white/70 font-mono"
+                          onFocus={(e) => e.target.select()}
+                        />
+                      </li>
+                    );
+                  })}
               </ul>
             </section>
 
