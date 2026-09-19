@@ -628,4 +628,25 @@
   animation: ranking-fade-up 0.55s ease-out both;
 }
 
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  .mesa-print-root,
+  .mesa-print-root * {
+    visibility: visible !important;
+  }
+  .mesa-print-root {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: white !important;
+    color: black !important;
+  }
+  .print\\:hidden {
+    display: none !important;
+  }
+}
+
 

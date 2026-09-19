@@ -1,25 +1,21 @@
 {
-  "name": "MatComp",
+  "name": "MatComp Mesa",
   "short_name": "MatComp",
-  "description": "Competições para academias de Jiu-Jitsu",
-  "start_url": "/home",
-  "scope": "/",
+  "description": "Mesas e scoreboard de competições MatComp",
+  "start_url": "/mesa",
   "display": "standalone",
   "background_color": "#0a0a0b",
-  "theme_color": "#0a0a0b",
-  "orientation": "portrait-primary",
+  "theme_color": "#e11d48",
   "icons": [
     {
-      "src": "/icon-192.png",
+      "src": "/favicon.png",
       "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
+      "type": "image/png"
     },
     {
-      "src": "/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
     }
   ]
 }

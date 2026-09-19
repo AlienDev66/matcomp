@@ -31,8 +31,9 @@ SQL Editor → corre **por ordem**:
 8. `supabase/migrations/20260919240000_win_method_no_show.sql`
 9. `supabase/migrations/20260919250000_mats_count.sql`
 10. `supabase/migrations/20260919260000_sides_swapped.sql`
+11. `supabase/migrations/20260919270000_sprint_ops.sql`
 
-As migrations 4–5 acrescentam pagamentos, rankings, federações, bucket de capas, e roster só com contas MatComp (add by email / remove). A 9 define `mats_count` (N tatâmis → N mesas independentes). A 10 sincroniza trocar lados mesa ↔ display.
+As migrations 4–5 acrescentam pagamentos, rankings, federações, bucket de capas, e roster só com contas MatComp (add by email / remove). A 9 define `mats_count`. A 10 sincroniza trocar lados. A 11: formatos de chave, event_staff/tokens mesa, aprovação federação, email_outbox.
 
 ### 2. Env
 
@@ -88,3 +89,20 @@ Eventos seed: **Barcelos LIVE** (4 tatâmis + muitas lutas), **Porto** (inscriç
 4. Definir nº de tatâmis → gerar chave → abrir `/mesa/:id/1` … `/mesa/:id/N` (um PC por mesa) → scoreboard / TV
 5. `/rankings` → Recalcular após eventos `finished`
 6. Federação demo: `/f/matcomp` (seed na migration)
+
+## Security checklist (RLS)
+
+- [ ] Migrations 1–11 corridas; RLS activo em `competitions`, `matches`, `entries`, `event_staff`, `email_outbox`, `federation_admins`
+- [ ] `SUPABASE_SERVICE_ROLE_KEY` só no servidor / seed — nunca no browser
+- [ ] Tokens de mesa: partilhar só por canal seguro; revogar após o evento
+- [ ] `RESEND_API_KEY` só server-side; outbox guarda PII (emails) — acesso manager-only
+- [ ] Scoreboard writes: manager auth **ou** `mesa_*` RPCs com token válido
+- [ ] Federação: só `federation_admins` aprova eventos (`federation_approval`)
+
+## Testes
+
+```bash
+bun test
+```
+
+Cobrem planners de chave (single / double / RR / consolação + BYEs).
