@@ -1,100 +1,158 @@
 import { createFileRoute, Link, Navigate } from "@tanstack/react-router";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/Logo";
-import { useAuth } from "@/hooks/useAuth";
-import { GitBranch, MonitorPlay, Shield, Users } from "lucide-react";
+import { GitBranch, MonitorPlay, Trophy, Users } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "MatComp — Competições para academias" },
+      { title: "MatComp — Software de torneios de BJJ" },
       {
         name: "description",
-        content: "Organiza torneios de Jiu-Jitsu: chaves, tatâmis e ecrãs ao vivo. Feito para várias academias.",
+        content:
+          "Organiza competições de Jiu-Jitsu: chaves, inscrições, tatâmis ao vivo e páginas públicas — feito para academias.",
       },
     ],
   }),
-  component: Landing,
+  component: MarketingLanding,
 });
 
-function Landing() {
+function MarketingLanding() {
   const { session, loading } = useAuth();
   if (!loading && session) return <Navigate to="/home" />;
 
   return (
-    <div className="relative min-h-dvh overflow-hidden">
-      {/* Atmosphere — full-bleed gradient plane */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 80% 60% at 70% 10%, rgba(225,29,72,0.28), transparent 55%), radial-gradient(ellipse 50% 40% at 10% 80%, rgba(251,191,36,0.12), transparent 50%), linear-gradient(180deg, #0a0a0b 0%, #121014 100%)",
-        }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-[0.07]"
-        style={{
-          backgroundImage:
-            "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")",
-        }}
-      />
-
-      <header className="relative z-10 mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
-        <div className="flex items-center gap-3">
-          <Logo className="h-10 w-10" />
-          <span className="font-display text-2xl font-bold tracking-tight">MatComp</span>
-        </div>
-        <Button asChild className="bg-primary hover:bg-primary/90">
-          <Link to="/auth">Entrar</Link>
-        </Button>
-      </header>
-
-      <main className="relative z-10 mx-auto max-w-6xl px-6 pb-24 pt-10 md:pt-20">
-        <div className="max-w-3xl">
-          <p className="mb-5 text-xs font-medium uppercase tracking-[0.35em] text-amber-400/90">
-            Plataforma de competições
-          </p>
-          <h1 className="font-display text-5xl font-bold leading-[0.95] tracking-tight md:text-7xl">
-            Torneios limpos.
-            <br />
-            <span className="text-primary">Chaves claras.</span>
-            <br />
-            Qualquer academia.
-          </h1>
-          <p className="mt-8 max-w-xl text-lg text-white/60 leading-relaxed">
-            MatComp é o Smoothcomp das academias: cria eventos, gera brackets, gere tatâmis e
-            partilha o ecrã público — sem misturar com mensalidades.
-          </p>
-          <div className="mt-10 flex flex-wrap gap-3">
-            <Button asChild size="lg" className="min-h-12 bg-primary px-8 text-base hover:bg-primary/90">
-              <Link to="/auth">Criar conta grátis</Link>
+    <div className="min-h-dvh bg-[#0a0a0b] text-white">
+      <header className="absolute inset-x-0 top-0 z-40">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
+          <Link to="/" className="flex items-center gap-2.5">
+            <Logo className="h-9 w-9" />
+            <span className="font-display text-lg font-bold tracking-[0.14em] uppercase">
+              MatComp
+            </span>
+          </Link>
+          <div className="flex items-center gap-2">
+            <Button asChild variant="ghost" className="text-white/70 hover:text-white hover:bg-white/10">
+              <Link to="/auth">Entrar</Link>
             </Button>
-            <Button asChild size="lg" variant="outline" className="min-h-12 border-white/20 bg-white/5 text-base">
-              <a href="#como">Como funciona</a>
+            <Button asChild className="bg-primary hover:bg-primary/90 text-white">
+              <Link to="/auth">Criar conta</Link>
             </Button>
           </div>
         </div>
+      </header>
 
-        <section id="como" className="mt-28 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="relative min-h-[88dvh] flex flex-col justify-end overflow-hidden">
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(ellipse 70% 55% at 50% 0%, rgba(225,29,72,0.42), transparent 58%), linear-gradient(180deg, #16080c 0%, #0a0a0b 72%)",
+          }}
+        />
+        <div
+          className="absolute inset-0 opacity-[0.12]"
+          style={{
+            backgroundImage:
+              "repeating-linear-gradient(-18deg, transparent, transparent 18px, rgba(255,255,255,0.35) 18px, rgba(255,255,255,0.35) 19px)",
+          }}
+        />
+        <div className="relative mx-auto w-full max-w-6xl px-4 pb-16 pt-28 md:pb-24 md:pt-36">
+          <p className="font-display text-5xl md:text-7xl lg:text-8xl font-bold tracking-[0.08em] uppercase leading-none">
+            MatComp
+          </p>
+          <p className="mt-5 max-w-xl text-lg md:text-xl text-white/60 leading-relaxed">
+            Software de torneios para Jiu-Jitsu: chaves, inscrições, tatâmis ao vivo e páginas
+            públicas — feito para academias.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Button asChild size="lg" className="bg-primary hover:bg-primary/90 text-white px-8">
+              <Link to="/auth">Começar</Link>
+            </Button>
+            <Button
+              asChild
+              size="lg"
+              variant="outline"
+              className="border-white/20 bg-transparent text-white hover:bg-white/5 px-8"
+            >
+              <Link to="/auth">Criar evento</Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      <section id="features" className="mx-auto max-w-6xl px-4 py-20 space-y-10">
+        <h2 className="font-display text-3xl md:text-4xl font-bold max-w-lg">
+          Tudo para correr um open limpo
+        </h2>
+        <div className="grid gap-8 md:grid-cols-2">
           {[
-            { icon: Users, t: "Multi-academia", d: "Cada academia com o seu espaço, atletas e eventos." },
-            { icon: GitBranch, t: "Chaves automáticas", d: "Single-elim em segundos a partir das inscrições." },
-            { icon: MonitorPlay, t: "Ao vivo", d: "Atualiza lutas e o público vê na hora." },
-            { icon: Shield, t: "Papéis claros", d: "Owner, admin e staff — só quem precisa gere." },
+            {
+              icon: GitBranch,
+              t: "Chaves",
+              d: "Eliminação simples em segundos a partir das inscrições. Mais formatos a caminho.",
+            },
+            {
+              icon: Users,
+              t: "Inscrições",
+              d: "Atletas juntam-se a academias, pedem adesão e inscrevem-se sozinhos.",
+            },
+            {
+              icon: MonitorPlay,
+              t: "Tatâmis ao vivo",
+              d: "Página pública com lutas, horários e resultados em tempo quase real.",
+            },
+            {
+              icon: Trophy,
+              t: "Rankings e medalhas",
+              d: "Pontos por temporada, ecrãs de tatâmi e marcador digital.",
+            },
           ].map((f) => (
-            <div key={f.t} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-              <f.icon className="mb-4 h-6 w-6 text-primary" />
-              <p className="font-display text-lg font-semibold">{f.t}</p>
-              <p className="mt-2 text-sm text-white/50 leading-relaxed">{f.d}</p>
+            <div key={f.t} className="flex gap-4 border-t border-white/10 pt-6">
+              <f.icon className="h-6 w-6 text-primary shrink-0 mt-0.5" />
+              <div>
+                <p className="font-display text-xl font-semibold">{f.t}</p>
+                <p className="mt-2 text-sm text-white/50 leading-relaxed">{f.d}</p>
+              </div>
             </div>
           ))}
-        </section>
-      </main>
+        </div>
+      </section>
 
-      <footer className="relative z-10 border-t border-white/10 py-8 text-center text-xs text-white/35">
-        © {new Date().getFullYear()} MatComp — competições para academias
+      <section className="border-t border-white/10 bg-[#111113] py-16">
+        <div className="mx-auto max-w-3xl px-4 text-center space-y-6">
+          <h2 className="font-display text-3xl font-bold">Cria o teu primeiro evento hoje</h2>
+          <p className="text-white/55">
+            Conta grátis. Junta-te a uma academia ou cria a tua. Organiza o próximo open em minutos.
+          </p>
+          <Button asChild size="lg" className="bg-primary hover:bg-primary/90 text-white px-10">
+            <Link to="/auth">Criar conta</Link>
+          </Button>
+        </div>
+      </section>
+
+      <footer className="border-t border-white/10 py-10">
+        <div className="mx-auto max-w-6xl px-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 text-sm">
+          <div className="flex items-center gap-2">
+            <Logo className="h-8 w-8" />
+            <span className="font-display font-bold tracking-wider uppercase">MatComp</span>
+          </div>
+          <div className="flex flex-wrap gap-6 text-white/45">
+            <Link to="/auth" className="hover:text-white">
+              Eventos
+            </Link>
+            <a href="#features" className="hover:text-white">
+              Funcionalidades
+            </a>
+            <Link to="/auth" className="hover:text-white">
+              Suporte
+            </Link>
+          </div>
+        </div>
+        <p className="mt-8 text-center text-xs text-white/30">
+          © {new Date().getFullYear()} MatComp. Todos os direitos reservados.
+        </p>
       </footer>
     </div>
   );
