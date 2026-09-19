@@ -68,7 +68,9 @@ function AuthPage() {
             <Logo className="h-10 w-10" />
             <span className="font-display text-2xl font-bold">MatComp</span>
           </Link>
-          <p className="text-sm text-muted-foreground">Organiza competições da tua academia</p>
+          <p className="text-sm text-muted-foreground">
+            Uma conta para treinar, juntar-te a academias e criar eventos
+          </p>
         </div>
 
         <div className="flex rounded-xl border border-border bg-card/40 p-1">
