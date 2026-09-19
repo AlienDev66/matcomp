@@ -1,6 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { fetchAcademyBySlug, fetchAthletes, fetchCompetitions } from "@/lib/competition/api";
+import {
+  fetchAcademyBySlug,
+  fetchAcademyJoinRequests,
+  fetchAthletes,
+  fetchCompetitions,
+} from "@/lib/competition/api";
 import { STATUS_LABEL } from "@/lib/competition/types";
 import { Button } from "@/components/ui/button";
 import { Plus, Trophy, Users } from "lucide-react";
@@ -26,6 +31,11 @@ function AcademyDashboard() {
     queryFn: () => fetchAthletes(academy!.id),
     enabled: !!academy?.id,
   });
+  const { data: pending = [] } = useQuery({
+    queryKey: ["academy-join-requests", academy?.id],
+    queryFn: () => fetchAcademyJoinRequests(academy!.id),
+    enabled: !!academy?.id,
+  });
 
   const live = competitions.filter((c) => c.status === "live");
   const upcoming = competitions.filter((c) => c.status === "draft" || c.status === "registration");
@@ -44,11 +54,29 @@ function AcademyDashboard() {
         </Button>
       </div>
 
+      {pending.length > 0 && (
+        <Link
+          to="/a/$slug/athletes"
+          params={{ slug }}
+          className="flex flex-wrap items-center justify-between gap-3 border border-amber-500/30 bg-amber-500/10 px-5 py-4 hover:bg-amber-500/15"
+        >
+          <div>
+            <p className="font-display font-semibold text-amber-100">
+              {pending.length} pedido{pending.length > 1 ? "s" : ""} de adesão
+            </p>
+            <p className="text-sm text-amber-100/70 mt-0.5">
+              Atletas à espera de Aceitar / Rejeitar
+            </p>
+          </div>
+          <span className="text-sm font-medium text-amber-100">Abrir inbox →</span>
+        </Link>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-3">
         {[
           { label: "Atletas", value: athletes.length, icon: Users },
+          { label: "Pedidos", value: pending.length, icon: Users },
           { label: "Ao vivo", value: live.length, icon: Trophy },
-          { label: "Eventos", value: competitions.length, icon: Trophy },
         ].map((s) => (
           <div key={s.label} className="rounded-2xl border border-border bg-card/40 p-5">
             <s.icon className="h-5 w-5 text-primary mb-3" />

@@ -106,8 +106,8 @@ function CompetitionsPage() {
         {competitions.map((c) => (
           <Link
             key={c.id}
-            to="/a/$slug/competitions/$competitionId"
-            params={{ slug, competitionId: c.id }}
+            to="/events/$competitionId"
+            params={{ competitionId: c.id }}
             className="flex items-center justify-between rounded-2xl border border-border bg-card/40 px-5 py-4 hover:border-primary/40"
           >
             <div>

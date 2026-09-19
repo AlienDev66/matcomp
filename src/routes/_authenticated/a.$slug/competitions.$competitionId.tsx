@@ -147,7 +147,7 @@ function CompetitionAdminPage() {
           {competition.venue && <p className="text-sm text-muted-foreground mt-1">{competition.venue}</p>}
         </div>
         <Button asChild variant="outline" className="border-white/15">
-          <Link to="/c/$competitionId" params={{ competitionId }} target="_blank">
+          <Link to="/$lang/event/$eventId" params={{ lang: "pt", eventId: competitionId }} target="_blank">
             <ExternalLink className="h-4 w-4 mr-2" /> Página pública
           </Link>
         </Button>
