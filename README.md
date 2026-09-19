@@ -34,8 +34,12 @@ SQL Editor → corre **por ordem**:
 11. `supabase/migrations/20260919270000_sprint_ops.sql`
 12. `supabase/migrations/20260919280000_day_ops_eta_tokens.sql`
 13. `supabase/migrations/20260919290000_day_stations.sql`
+14. `supabase/migrations/20260919300000_organizers.sql`
+15. `supabase/migrations/20260919300001_fix_organizer_rls.sql`
+16. `supabase/migrations/20260919310000_organizer_smoothcomp_parity.sql`
+17. `supabase/migrations/20260919320000_academy_community_public.sql`
 
-As migrations 4–5 acrescentam pagamentos, rankings, federações, bucket de capas, e roster só com contas MatComp (add by email / remove). A 9 define `mats_count`. A 10 sincroniza trocar lados. A 11: formatos de chave, event_staff/tokens mesa, aprovação federação, email_outbox. A 12: pesagem oficial, pausar tatâmi, expiração de tokens mesa, ETA. A 13: estações do dia (pesagem / chamada / pódio) + filas.
+As migrations 4–5 acrescentam pagamentos, rankings, federações, bucket de capas, e roster só com contas MatComp (add by email / remove). A 9 define `mats_count`. A 10 sincroniza trocar lados. A 11: formatos de chave, event_staff/tokens mesa, aprovação federação, email_outbox. A 12: pesagem oficial, pausar tatâmi, expiração de tokens mesa, ETA. A 13: estações do dia (pesagem / chamada / pódio) + filas. A 14–16: **Organizer** Smoothcomp-parity (billing/VAT/créditos, RLS, página pública `/o/:slug`, manager privado). A 17: community de academias (staff público + rankings).
 
 ### 2. Env
 
