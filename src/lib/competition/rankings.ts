@@ -34,9 +34,15 @@ const POINTS = { gold: 10, silver: 6, bronze: 3, win: 1 };
 export async function recalcRankingSeason(seasonId: string) {
   const { data: comps, error: cErr } = await supabase
     .from("competitions")
-    .select("id")
+    .select("id, federation_approval")
     .eq("status", "finished");
   if (cErr) throw cErr;
+
+  // Rankings only count finished events that are federation-approved (or none = open).
+  const eligible = (comps ?? []).filter((c: { federation_approval?: string | null }) => {
+    const a = c.federation_approval ?? "none";
+    return a === "approved" || a === "none";
+  });
 
   const agg = new Map<
     string,
@@ -62,7 +68,7 @@ export async function recalcRankingSeason(seasonId: string) {
     });
   };
 
-  for (const c of comps ?? []) {
+  for (const c of eligible) {
     const matches = await fetchMatches(c.id);
     for (const m of matches) {
       if (m.status !== "finished" || !m.winner_id) continue;

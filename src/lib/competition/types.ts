@@ -80,6 +80,7 @@ export type Competition = {
   organizer_events_count?: number | null;
   mats_count?: number;
   federation_approval?: "none" | "pending" | "approved" | "rejected";
+  paused_mats?: number[];
 };
 
 export type BracketFormat =
@@ -136,6 +137,9 @@ export type CompetitionEntry = {
   amount_paid_cents?: number | null;
   check_in_code?: string | null;
   checked_in_at?: string | null;
+  weigh_in_kg?: number | null;
+  weigh_in_at?: string | null;
+  weigh_in_status?: "pending" | "passed" | "failed";
   athlete?: Athlete | null;
   competitions?: Pick<Competition, "id" | "name" | "starts_at" | "cover_image_url"> | null;
 };
@@ -205,6 +209,10 @@ export const WIN_METHOD_BTN: Record<WinMethod, string> = {
   other: "OUTRO",
 };
 
+export type AthleteCallStatus = "none" | "warmup" | "mat" | "holding" | "done";
+export type PodiumMedal = "gold" | "silver" | "bronze";
+export type PodiumCallStatus = "pending" | "called" | "done" | "skipped";
+
 export type CompetitionMatch = {
   id: string;
   competition_id: string;
@@ -231,6 +239,10 @@ export type CompetitionMatch = {
   clock_running?: boolean;
   clock_updated_at?: string | null;
   sides_swapped?: boolean;
+  call_a?: AthleteCallStatus;
+  call_b?: AthleteCallStatus;
+  call_a_at?: string | null;
+  call_b_at?: string | null;
   bracket_side?: BracketSide | null;
   is_bye?: boolean;
   loser_next_match_id?: string | null;
@@ -239,7 +251,7 @@ export type CompetitionMatch = {
   athlete_b?: Athlete | null;
 };
 
-export type EventStaffRole = "mesa" | "referee" | "admin";
+export type EventStaffRole = "mesa" | "referee" | "admin" | "weigh_in" | "caller" | "podium";
 
 export type EventStaff = {
   id: string;
@@ -250,6 +262,20 @@ export type EventStaff = {
   token: string;
   label: string | null;
   active: boolean;
+  expires_at?: string | null;
+};
+
+export type PodiumCall = {
+  id: string;
+  competition_id: string;
+  division_id: string;
+  athlete_id: string;
+  medal: PodiumMedal;
+  status: PodiumCallStatus;
+  called_at?: string | null;
+  done_at?: string | null;
+  created_at?: string;
+  athlete?: { id: string; full_name: string } | null;
 };
 
 export function slugify(input: string): string {
