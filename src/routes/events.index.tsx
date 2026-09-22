@@ -24,11 +24,11 @@ function PublicEventsPage() {
   return (
     <div className="min-h-dvh bg-[#121214] text-white">
       <header className="sticky top-0 z-40 border-b border-white/10 bg-[#121214]/95 backdrop-blur-xl">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
-          <div className="flex items-center gap-6">
-            <Link to="/" className="flex items-center gap-2">
-              <Logo className="h-8 w-8" />
-              <span className="font-display text-sm font-bold tracking-[0.16em] uppercase">
+        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-3 sm:px-4">
+          <div className="flex items-center gap-3 sm:gap-6 min-w-0">
+            <Link to="/" className="flex items-center gap-2 min-w-0 shrink">
+              <Logo className="h-8 w-8 shrink-0" />
+              <span className="font-display text-sm font-bold tracking-[0.16em] uppercase truncate">
                 MatComp
               </span>
             </Link>
@@ -41,27 +41,25 @@ function PublicEventsPage() {
               </Link>
             </nav>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {session ? (
               <Button asChild size="sm" className="bg-primary hover:bg-primary/90">
                 <Link to="/home">Área pessoal</Link>
               </Button>
             ) : (
               <>
-                <Button
-                  asChild
-                  size="sm"
-                  className="bg-primary hover:bg-primary/90"
-                >
+                <Button asChild size="sm" variant="ghost" className="text-white/70 hover:text-white px-2.5">
                   <Link to="/auth">Log in</Link>
                 </Button>
                 <Button
                   asChild
                   size="sm"
-                  variant="secondary"
-                  className="bg-white/10 text-white hover:bg-white/15"
+                  className="bg-primary hover:bg-primary/90 px-3"
                 >
-                  <Link to="/auth">Create account</Link>
+                  <Link to="/auth">
+                    <span className="sm:hidden">Criar</span>
+                    <span className="hidden sm:inline">Create account</span>
+                  </Link>
                 </Button>
               </>
             )}

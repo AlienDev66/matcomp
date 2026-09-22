@@ -72,23 +72,40 @@ function MarketingLanding() {
 
   return (
     <div className="landing-root min-h-dvh bg-[#0a0a0b] text-white overflow-x-hidden">
-      <header className="absolute inset-x-0 top-0 z-40">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
-          <Link to="/" className="flex items-center gap-2.5">
-            <Logo className="h-9 w-9" />
-            <span className="font-display text-lg font-bold tracking-[0.14em] uppercase">
+      <header className="landing-header absolute inset-x-0 top-0 z-40">
+        <div className="mx-auto flex h-14 sm:h-16 max-w-6xl items-center justify-between gap-2 sm:gap-4 px-3 sm:px-4">
+          <Link to="/" className="flex items-center gap-2 min-w-0 shrink">
+            <Logo className="h-8 w-8 sm:h-9 sm:w-9 shrink-0" />
+            <span className="font-display text-base sm:text-lg font-bold tracking-[0.14em] uppercase truncate">
               MatComp
             </span>
           </Link>
-          <div className="flex items-center gap-2">
-            <Button asChild variant="ghost" className="text-white/70 hover:text-white hover:bg-white/10">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+            <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="hidden md:inline-flex text-white/70 hover:text-white hover:bg-white/10"
+            >
               <Link to="/events">Find events</Link>
             </Button>
-            <Button asChild variant="ghost" className="text-white/70 hover:text-white hover:bg-white/10">
+            <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="text-white/70 hover:text-white hover:bg-white/10 px-2.5 sm:px-3"
+            >
               <Link to="/auth">Entrar</Link>
             </Button>
-            <Button asChild className="landing-cta-primary bg-primary hover:bg-primary/90 text-white">
-              <Link to="/auth">Criar conta</Link>
+            <Button
+              asChild
+              size="sm"
+              className="landing-cta-primary bg-primary hover:bg-primary/90 text-white px-3 sm:px-4"
+            >
+              <Link to="/auth">
+                <span className="sm:hidden">Criar</span>
+                <span className="hidden sm:inline">Criar conta</span>
+              </Link>
             </Button>
           </div>
         </div>
