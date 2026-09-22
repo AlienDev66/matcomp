@@ -187,6 +187,41 @@ function EventAdminPage() {
     });
   }, [hostAthletes, entries, divisionId]);
 
+  const entriesByCategory = useMemo(() => {
+    const entryDivs = divisions.filter((d) => d.kind !== "group");
+    const byDiv = new Map<string, typeof entries>();
+    const unassigned: typeof entries = [];
+    for (const e of entries) {
+      if (!e.division_id) {
+        unassigned.push(e);
+        continue;
+      }
+      const list = byDiv.get(e.division_id) ?? [];
+      list.push(e);
+      byDiv.set(e.division_id, list);
+    }
+    const groups = [
+      ...entryDivs
+        .map((d) => ({
+          id: d.id,
+          name: d.name,
+          rows: byDiv.get(d.id) ?? [],
+        }))
+        .filter((g) => g.rows.length > 0),
+      ...[...byDiv.entries()]
+        .filter(([id]) => !entryDivs.some((d) => d.id === id))
+        .map(([id, rows]) => ({
+          id,
+          name: divisions.find((d) => d.id === id)?.name ?? "Categoria",
+          rows,
+        })),
+    ];
+    if (unassigned.length) {
+      groups.push({ id: "__none", name: "Sem categoria", rows: unassigned });
+    }
+    return groups;
+  }, [entries, divisions]);
+
   const refresh = async () => {
     await Promise.all([
       qc.invalidateQueries({ queryKey: ["divisions", competitionId] }),
@@ -920,96 +955,141 @@ function EventAdminPage() {
         )}
 
         {(isManager ? tab === "inscritos" : true) && (
-        <section className="space-y-3">
+        <section className="space-y-4">
           <h2 className="font-display text-xl font-semibold">Inscritos ({entries.length})</h2>
-          <div className="divide-y divide-border rounded-2xl border border-border bg-card/30">
-            {entries.map((e) => (
-              <div key={e.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 text-sm">
-                <div>
-                  <p className="font-medium">{e.athlete?.full_name ?? e.athlete_id.slice(0, 8)}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {divisions.find((d) => d.id === e.division_id)?.name ?? "—"}
-                    {e.approved === false ? " · não aprovado" : " · aprovado"}
-                    {e.weigh_in_status === "passed"
-                      ? ` · pesagem OK (${e.weigh_in_kg ?? "?"} kg)`
-                      : e.weigh_in_status === "failed"
-                        ? ` · pesagem FALHOU (${e.weigh_in_kg ?? "?"} kg)`
-                        : " · sem pesagem"}
-                  </p>
-                </div>
-                {isManager && (
-                  <div className="flex flex-wrap gap-1">
-                    <Input
-                      type="number"
-                      step="0.1"
-                      placeholder="kg"
-                      className="h-8 w-20"
-                      id={`wi-${e.id}`}
-                      defaultValue={e.weigh_in_kg ?? ""}
-                    />
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="border-white/15"
-                      onClick={async () => {
-                        const el = document.getElementById(`wi-${e.id}`) as HTMLInputElement | null;
-                        const kg = Number(el?.value);
-                        if (!Number.isFinite(kg) || kg <= 0) {
-                          toast.error("Indica o peso em kg");
-                          return;
-                        }
-                        try {
-                          await recordWeighIn(e.id, { weigh_in_kg: kg, weigh_in_status: "passed" });
-                          toast.success("Pesagem OK");
-                          await qc.invalidateQueries({ queryKey: ["entries", competitionId] });
-                        } catch (err: any) {
-                          toast.error(err.message);
-                        }
-                      }}
-                    >
-                      OK
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="border-white/15 text-rose-400"
-                      onClick={async () => {
-                        const el = document.getElementById(`wi-${e.id}`) as HTMLInputElement | null;
-                        const kg = Number(el?.value);
-                        if (!Number.isFinite(kg) || kg <= 0) {
-                          toast.error("Indica o peso em kg");
-                          return;
-                        }
-                        try {
-                          await recordWeighIn(e.id, { weigh_in_kg: kg, weigh_in_status: "failed" });
-                          toast.message("Pesagem falhada registada");
-                          await qc.invalidateQueries({ queryKey: ["entries", competitionId] });
-                        } catch (err: any) {
-                          toast.error(err.message);
-                        }
-                      }}
-                    >
-                      Falhou
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="border-white/15"
-                      onClick={() => void toggleApproved(e.id, e.approved === false)}
-                    >
-                      {e.approved === false ? "Aprovar" : "Desaprovar"}
-                    </Button>
+          {entries.length === 0 ? (
+            <div className="rounded-2xl border border-border bg-card/30 px-5 py-6 text-sm text-muted-foreground text-center">
+              Sem inscritos
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {entriesByCategory.map((group) => {
+                const approved = group.rows.filter((e) => e.approved !== false).length;
+                return (
+                  <div
+                    key={group.id}
+                    className="overflow-hidden rounded-2xl border border-border bg-card/30"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-white/[0.03] px-5 py-3">
+                      <h3 className="font-display font-semibold text-sm sm:text-base">
+                        {group.name}
+                      </h3>
+                      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                        {group.rows.length} inscrito{group.rows.length === 1 ? "" : "s"}
+                        {" · "}
+                        {approved} aprovado{approved === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                    <div className="divide-y divide-border">
+                      {group.rows.map((e) => (
+                        <div
+                          key={e.id}
+                          className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 text-sm"
+                        >
+                          <div>
+                            <p className="font-medium">
+                              {e.athlete?.full_name ?? e.athlete_id.slice(0, 8)}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {e.approved === false ? "não aprovado" : "aprovado"}
+                              {e.weigh_in_status === "passed"
+                                ? ` · pesagem OK (${e.weigh_in_kg ?? "?"} kg)`
+                                : e.weigh_in_status === "failed"
+                                  ? ` · pesagem FALHOU (${e.weigh_in_kg ?? "?"} kg)`
+                                  : " · sem pesagem"}
+                            </p>
+                          </div>
+                          {isManager && (
+                            <div className="flex flex-wrap gap-1">
+                              <Input
+                                type="number"
+                                step="0.1"
+                                placeholder="kg"
+                                className="h-8 w-20"
+                                id={`wi-${e.id}`}
+                                defaultValue={e.weigh_in_kg ?? ""}
+                              />
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="border-white/15"
+                                onClick={async () => {
+                                  const el = document.getElementById(
+                                    `wi-${e.id}`,
+                                  ) as HTMLInputElement | null;
+                                  const kg = Number(el?.value);
+                                  if (!Number.isFinite(kg) || kg <= 0) {
+                                    toast.error("Indica o peso em kg");
+                                    return;
+                                  }
+                                  try {
+                                    await recordWeighIn(e.id, {
+                                      weigh_in_kg: kg,
+                                      weigh_in_status: "passed",
+                                    });
+                                    toast.success("Pesagem OK");
+                                    await qc.invalidateQueries({
+                                      queryKey: ["entries", competitionId],
+                                    });
+                                  } catch (err: any) {
+                                    toast.error(err.message);
+                                  }
+                                }}
+                              >
+                                OK
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="border-white/15 text-rose-400"
+                                onClick={async () => {
+                                  const el = document.getElementById(
+                                    `wi-${e.id}`,
+                                  ) as HTMLInputElement | null;
+                                  const kg = Number(el?.value);
+                                  if (!Number.isFinite(kg) || kg <= 0) {
+                                    toast.error("Indica o peso em kg");
+                                    return;
+                                  }
+                                  try {
+                                    await recordWeighIn(e.id, {
+                                      weigh_in_kg: kg,
+                                      weigh_in_status: "failed",
+                                    });
+                                    toast.message("Pesagem falhada registada");
+                                    await qc.invalidateQueries({
+                                      queryKey: ["entries", competitionId],
+                                    });
+                                  } catch (err: any) {
+                                    toast.error(err.message);
+                                  }
+                                }}
+                              >
+                                Falhou
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="border-white/15"
+                                onClick={() =>
+                                  void toggleApproved(e.id, e.approved === false)
+                                }
+                              >
+                                {e.approved === false ? "Aprovar" : "Desaprovar"}
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
-            {entries.length === 0 && (
-              <p className="px-5 py-6 text-sm text-muted-foreground text-center">Sem inscritos</p>
-            )}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </section>
         )}
 
